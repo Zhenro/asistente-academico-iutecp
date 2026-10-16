@@ -968,20 +968,37 @@
       backdrop.classList.remove('active');
     }
 
+    let currentSessionId = localStorage.getItem('iutecp_session_id') || ('sess_' + Math.random().toString(36).substring(2, 11));
+    localStorage.setItem('iutecp_session_id', currentSessionId);
+
     function selectTopic(text) {
       closeDrawer();
       chatQuery.value = text;
       dispatchMessage();
     }
 
-    function clearConversation() {
+    async function clearConversation() {
       closeDrawer();
+      const oldSessionId = currentSessionId;
+      currentSessionId = 'sess_' + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem('iutecp_session_id', currentSessionId);
+
       chatScroll.innerHTML = '';
       if (heroWelcome) {
         chatScroll.appendChild(heroWelcome);
       }
       chatQuery.value = '';
       chatQuery.focus();
+
+      try {
+        await fetch('/api/chat/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: oldSessionId })
+        });
+      } catch (err) {
+        console.warn('No se pudo resetear la sesión en el servidor:', err);
+      }
     }
 
     async function dispatchMessage() {
@@ -998,7 +1015,7 @@
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text })
+          body: JSON.stringify({ message: text, session_id: currentSessionId })
         });
 
         const data = await response.json();

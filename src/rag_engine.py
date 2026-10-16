@@ -32,6 +32,11 @@ except ImportError:
 class RAGEngine:
     def __init__(self):
         self._cached_chunks = None
+        self.session_memories: Dict[str, List[Dict[str, str]]] = {}
+
+    def clear_session(self, session_id: str):
+        if session_id in self.session_memories:
+            del self.session_memories[session_id]
 
     def _get_memory_chunks(self):
         if self._cached_chunks is None:
@@ -54,10 +59,18 @@ class RAGEngine:
                         })
         return self._cached_chunks
 
-    def retrieve(self, query: str, top_k: int = TOP_K_RESULTS) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = TOP_K_RESULTS, history: List[Dict[str, str]] = None) -> List[Dict[str, Any]]:
         # Motor de Búsqueda Semántica Ultraliviano (< 30MB RAM)
         chunks = self._get_memory_chunks()
+        
+        # Palabras clave de la consulta actual
         query_words = [w.lower() for w in query.split() if len(w) > 2]
+        
+        # Si hay historial previo, incorporar términos clave del turno anterior para preguntas de seguimiento
+        if history:
+            for item in history[-2:]:
+                query_words.extend([w.lower() for w in item.get("content", "").split() if len(w) > 4])
+        
         scored = []
         for c in chunks:
             score = sum(2 for w in query_words if w in c["lower"])
@@ -77,9 +90,12 @@ class RAGEngine:
             for c in top
         ]
 
-    def generate_response(self, query: str) -> Dict[str, Any]:
-        # 1. Retrieve relevant contexts
-        contexts = self.retrieve(query)
+    def generate_response(self, query: str, session_id: str = None) -> Dict[str, Any]:
+        # Obtener historial de la sesión si existe
+        history = self.session_memories.get(session_id, []) if session_id else []
+
+        # 1. Retrieve relevant contexts (considerando contexto de historial)
+        contexts = self.retrieve(query, history=history)
         
         if not contexts:
             return {
@@ -95,18 +111,28 @@ class RAGEngine:
         
         unique_sources = list({f"{c['source']} (pág. {c['page']})" for c in contexts})
 
+        # Formatear historial reciente para el prompt
+        history_text = ""
+        if history:
+            formatted_turns = []
+            for h in history[-4:]:
+                role_label = "Estudiante" if h["role"] == "user" else "Asistente"
+                formatted_turns.append(f"{role_label}: {h['content']}")
+            history_text = "HISTORIAL RECIENTE DE LA CONVERSACIÓN:\n" + "\n".join(formatted_turns) + "\n\n"
+
         system_instruction = (
             "Eres el Asistente Virtual Oficial del Instituto Universitario de Tecnología 'Elías Calixto Pompa' (IUTECP). "
             "Tu misión es orientar con amabilidad, claridad y precisión a la comunidad estudiantil. "
             "REGLAS OBLIGATORIAS:\n"
             "1. Responde de forma clara y estructurada (usa viñetas o listas numeradas cuando explique requisitos o pasos).\n"
             "2. Basa tu respuesta ESTRICTAMENTE en la información institucional proporcionada en el CONTEXTO.\n"
-            "3. Menciona las fuentes oficiales, artículos o sedes relevantes según el contexto.\n"
-            "4. Si el contexto no contiene la respuesta completa, indica cordialmente que el estudiante debe acudir a la taquilla de Control de Estudios o consultar en TernaNet.\n"
-            "5. Responde siempre en español formal pero cercano."
+            "3. Recuerda y utiliza el HISTORIAL DE LA CONVERSACIÓN para responder preguntas de seguimiento (ej. pronombres como 'allí', 'eso', 'esa sede', etc.).\n"
+            "4. Menciona las fuentes oficiales, artículos o sedes relevantes según el contexto.\n"
+            "5. Si el contexto no contiene la respuesta completa, indica cordialmente que el estudiante debe acudir a la taquilla de Control de Estudios o consultar en TernaNet.\n"
+            "6. Responde siempre en español formal pero cercano."
         )
 
-        user_prompt = f"CONTEXTO OFICIAL DEL IUTECP:\n{context_text}\n\nPREGUNTA DEL ESTUDIANTE: {query}"
+        user_prompt = f"{history_text}CONTEXTO OFICIAL DEL IUTECP:\n{context_text}\n\nNUEVA PREGUNTA DEL ESTUDIANTE: {query}"
 
         # 2. Strategy A: Use Google Gemini if key available
         current_api_key = os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
@@ -130,8 +156,16 @@ class RAGEngine:
                             contents=full_prompt
                         )
                         if response and response.text:
+                            answer = response.text
+                            # Guardar en memoria de sesión
+                            if session_id:
+                                if session_id not in self.session_memories:
+                                    self.session_memories[session_id] = []
+                                self.session_memories[session_id].append({"role": "user", "content": query})
+                                self.session_memories[session_id].append({"role": "assistant", "content": answer})
+                                self.session_memories[session_id] = self.session_memories[session_id][-6:]
                             return {
-                                "answer": response.text,
+                                "answer": answer,
                                 "sources": unique_sources
                             }
                     except Exception as e:
