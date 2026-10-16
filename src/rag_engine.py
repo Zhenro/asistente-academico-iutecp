@@ -272,6 +272,30 @@ class RAGEngine:
         
         return intro + summary + outro
 
+    def transcribe_audio(self, audio_bytes: bytes, mime_type: str = "audio/ogg") -> str:
+        """Transcribe notas de voz estudiantiles usando Gemini Multimodal."""
+        if not gemini_client:
+            raise RuntimeError("Gemini Client no está configurado.")
+        
+        from google.genai import types
+        part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+        prompt = (
+            "Eres el asistente de transcripción académica para el instituto universitario IUTECP. "
+            "Escucha este audio y transcribe textualmente en español la pregunta o comentario del estudiante. "
+            "Responde ÚNICAMENTE con la transcripción exacta, sin saludos, sin explicaciones ni comillas adicionales."
+        )
+        try:
+            response = gemini_client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[part, prompt]
+            )
+            if response and response.text:
+                return response.text.strip().strip('"').strip("'")
+            return ""
+        except Exception as e:
+            print(f"[!] Error transcribiendo audio con Gemini: {e}")
+            raise
+
 
 # Global instance
 rag_engine = RAGEngine()

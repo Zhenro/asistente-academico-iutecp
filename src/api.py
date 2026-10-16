@@ -72,9 +72,33 @@ class ChatResponse(BaseModel):
     sources: List[str]
 
 
+def send_telegram_chat_action(token: str, chat_id: int, action: str = "typing"):
+    """Envía un indicador de acción (typing, record_voice) a Telegram."""
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendChatAction"
+        payload = json.dumps({"chat_id": chat_id, "action": action}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass
+
+
+def download_telegram_file(token: str, file_id: str) -> bytes:
+    """Descarga el contenido binario de un archivo (audio/voz) desde Telegram."""
+    url_info = f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}"
+    req = urllib.request.Request(url_info)
+    with urllib.request.urlopen(req, timeout=10) as res:
+        data = json.loads(res.read().decode())
+    file_path = data.get("result", {}).get("file_path")
+    if not file_path:
+        raise ValueError("No se pudo obtener la ruta del archivo en Telegram.")
+    
+    download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+    with urllib.request.urlopen(download_url, timeout=15) as res:
+        return res.read()
+
+
 def send_telegram_message(token: str, chat_id: int, text: str):
-    import urllib.request
-    import json
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
@@ -126,25 +150,52 @@ async def telegram_webhook(update: dict):
         return {"status": "ignored", "reason": "TELEGRAM_BOT_TOKEN no configurada"}
     
     message = update.get("message") or update.get("edited_message")
-    if not message or "text" not in message:
+    if not message:
         return {"status": "ignored"}
         
     chat_id = message["chat"]["id"]
-    text = message["text"].strip()
     user_name = message.get("from", {}).get("first_name", "Estudiante")
     session_id = f"tg_{chat_id}"
+
+    text = message.get("text", "").strip() if message.get("text") else None
+    voice = message.get("voice") or message.get("audio")
+    is_voice = False
+
+    # Procesar Nota de Voz / Audio
+    if not text and voice:
+        send_telegram_chat_action(token, chat_id, "record_voice")
+        try:
+            file_id = voice.get("file_id")
+            mime_type = voice.get("mime_type", "audio/ogg")
+            audio_bytes = download_telegram_file(token, file_id)
+            
+            send_telegram_chat_action(token, chat_id, "typing")
+            transcription = rag_engine.transcribe_audio(audio_bytes, mime_type=mime_type)
+            if transcription:
+                text = transcription
+                is_voice = True
+            else:
+                send_telegram_message(token, chat_id, "⚠️ No logré escuchar con claridad la nota de voz. ¿Podrías grabarla de nuevo o escribir tu consulta?")
+                return {"status": "ok"}
+        except Exception as e:
+            print(f"[!] Error procesando nota de voz de Telegram: {e}")
+            send_telegram_message(token, chat_id, "⚠️ Ocurrió un error al procesar el audio. Por favor intenta de nuevo o escribe tu consulta en texto.")
+            return {"status": "ok"}
+
+    if not text:
+        return {"status": "ignored"}
 
     if text.startswith("/start"):
         welcome_msg = (
             f"¡Hola {user_name}! 👋\n\n"
             "Soy el *Asistente Académico Oficial del IUTECP*.\n\n"
-            "Puedo ayudarte a resolver consultas sobre:\n"
+            "Puedes hacerme tus consultas por *texto* o enviarme una *nota de voz* 🎙️ sobre:\n"
             "• 📋 Requisitos de nuevo ingreso y TernaNet\n"
             "• 🏢 Sedes, ubicaciones y teléfonos\n"
             "• 💳 Pagos de matrícula en cuotas con Cashea\n"
             "• 📊 Escala de notas y pérdida por inasistencias (PI)\n"
             "• 🎓 Servicio comunitario, pasantías y grado\n\n"
-            "¿Qué consulta tienes hoy? Escríbela y te orientaré de inmediato."
+            "¿Qué consulta tienes hoy? Escríbela o envíame un audio."
         )
         send_telegram_message(token, chat_id, welcome_msg)
         return {"status": "ok"}
@@ -155,8 +206,13 @@ async def telegram_webhook(update: dict):
         return {"status": "ok"}
 
     # Procesar consulta con RAG y memoria multi-turno
+    send_telegram_chat_action(token, chat_id, "typing")
     result = rag_engine.generate_response(text, session_id=session_id)
-    reply_text = result["answer"]
+    
+    reply_text = ""
+    if is_voice:
+        reply_text += f"🎙️ *Escuché:* \"_{text}_\"\n\n"
+    reply_text += result["answer"]
     if result.get("sources"):
         reply_text += "\n\n📚 *Fuentes oficiales:* " + ", ".join(result["sources"])
 

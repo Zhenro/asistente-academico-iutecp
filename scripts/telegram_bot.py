@@ -81,14 +81,39 @@ def main():
 
             for update in data.get("result", []):
                 offset = update["update_id"] + 1
-                msg = update.get("message")
-                if not msg or "text" not in msg:
-                    continue
-
                 chat_id = msg["chat"]["id"]
-                text = msg["text"].strip()
                 user_name = msg.get("from", {}).get("first_name", "Estudiante")
                 session_id = f"tg_{chat_id}"
+
+                text = msg.get("text", "").strip() if msg.get("text") else None
+                voice = msg.get("voice") or msg.get("audio")
+                is_voice = False
+
+                if not text and voice:
+                    try:
+                        print(f"[>] Nota de voz recibida de {user_name} ({chat_id})")
+                        file_id = voice.get("file_id")
+                        mime_type = voice.get("mime_type", "audio/ogg")
+                        
+                        # Obtener archivo de Telegram
+                        info_url = f"https://api.telegram.org/bot{TOKEN}/getFile?file_id={file_id}"
+                        with urllib.request.urlopen(info_url, timeout=10) as r:
+                            file_path = json.loads(r.read().decode()).get("result", {}).get("file_path")
+                        
+                        down_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_path}"
+                        with urllib.request.urlopen(down_url, timeout=15) as r:
+                            audio_bytes = r.read()
+                        
+                        text = rag_engine.transcribe_audio(audio_bytes, mime_type=mime_type)
+                        is_voice = True
+                        print(f"[🎤] Transcripción: \"{text}\"")
+                    except Exception as e:
+                        print(f"[!] Error procesando audio: {e}")
+                        send_telegram(TOKEN, chat_id, "⚠️ No pude escuchar con claridad el audio. ¿Podrías grabarlo de nuevo o escribir tu consulta?")
+                        continue
+
+                if not text:
+                    continue
 
                 print(f"[>] Mensaje de {user_name} ({chat_id}): {text}")
 
@@ -96,13 +121,13 @@ def main():
                     welcome = (
                         f"¡Hola {user_name}! 👋\n\n"
                         "Soy el *Asistente Académico Oficial del IUTECP*.\n\n"
-                        "Puedo orientarte sobre:\n"
+                        "Puedes hacerme tus consultas por *texto* o enviarme una *nota de voz* 🎙️ sobre:\n"
                         "• 📋 Requisitos de nuevo ingreso\n"
                         "• 🏢 Sedes y teléfonos de atención\n"
                         "• 💳 Pagos en cuotas con Cashea\n"
                         "• 📊 Calificaciones y pérdida de materia (PI)\n"
                         "• 🎓 Servicio comunitario y requisitos de grado\n\n"
-                        "¿En qué puedo ayudarte hoy?"
+                        "¿En qué puedo ayudarte hoy? Escríbela o envíame un audio."
                     )
                     send_telegram(TOKEN, chat_id, welcome)
                     continue
@@ -114,7 +139,10 @@ def main():
 
                 # Generar respuesta con RAG y memoria multi-turno
                 res_rag = rag_engine.generate_response(text, session_id=session_id)
-                reply = res_rag["answer"]
+                reply = ""
+                if is_voice:
+                    reply += f"🎙️ *Escuché:* \"_{text}_\"\n\n"
+                reply += res_rag["answer"]
                 if res_rag.get("sources"):
                     reply += "\n\n📚 *Fuentes oficiales:* " + ", ".join(res_rag["sources"])
 
