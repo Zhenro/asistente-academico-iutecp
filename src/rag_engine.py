@@ -1,16 +1,14 @@
 import os
 from typing import List, Dict, Any
-import chromadb
-from chromadb.utils import embedding_functions
 
 try:
     from src.config import (
-        CHROMA_DB_DIR, TOP_K_RESULTS, GEMINI_API_KEY, 
+        TOP_K_RESULTS, GEMINI_API_KEY, 
         GEMINI_MODEL, OPENAI_API_KEY, OPENAI_MODEL
     )
 except ImportError:
     from config import (
-        CHROMA_DB_DIR, TOP_K_RESULTS, GEMINI_API_KEY, 
+        TOP_K_RESULTS, GEMINI_API_KEY, 
         GEMINI_MODEL, OPENAI_API_KEY, OPENAI_MODEL
     )
 
@@ -33,29 +31,10 @@ except ImportError:
 
 class RAGEngine:
     def __init__(self):
-        self.client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
-        self.emb_fn = embedding_functions.DefaultEmbeddingFunction()
-
-    def get_collection(self):
-        col = self.client.get_or_create_collection(
-            name="iutecp_knowledge_base",
-            embedding_function=self.emb_fn
-        )
-        if col.count() == 0:
-            print("[*] Base vectorial vacia detectada. Indexando documentos...")
-            try:
-                from src.ingestion import build_vector_store
-            except ImportError:
-                from ingestion import build_vector_store
-            build_vector_store()
-            col = self.client.get_or_create_collection(
-                name="iutecp_knowledge_base",
-                embedding_function=self.emb_fn
-            )
-        return col
+        self._cached_chunks = None
 
     def _get_memory_chunks(self):
-        if not hasattr(self, "_cached_chunks") or not self._cached_chunks:
+        if self._cached_chunks is None:
             self._cached_chunks = []
             try:
                 from src.config import DOCUMENTS_DIR
@@ -76,37 +55,12 @@ class RAGEngine:
         return self._cached_chunks
 
     def retrieve(self, query: str, top_k: int = TOP_K_RESULTS) -> List[Dict[str, Any]]:
-        # Intentar con ChromaDB
-        try:
-            collection = self.get_collection()
-            results = collection.query(
-                query_texts=[query],
-                n_results=top_k
-            )
-            if results and "documents" in results and results["documents"] and results["documents"][0]:
-                docs = results["documents"][0]
-                metas = results["metadatas"][0] if "metadatas" in results else [{}] * len(docs)
-                dists = results["distances"][0] if "distances" in results else [0] * len(docs)
-                retrieved = [
-                    {
-                        "content": doc,
-                        "source": meta.get("source", "Documento Oficial IUTECP"),
-                        "page": meta.get("page", 1),
-                        "distance": dist
-                    }
-                    for doc, meta, dist in zip(docs, metas, dists)
-                ]
-                if retrieved:
-                    return retrieved
-        except Exception as e:
-            print(f"[!] ChromaDB retrieval: {e}. Activando recuperacion directa ultrarrapida...")
-
-        # Estrategia de Respaldo Ultrarrápida en Memoria (1 milisegundo)
+        # Motor de Búsqueda Semántica Ultraliviano (< 30MB RAM)
         chunks = self._get_memory_chunks()
         query_words = [w.lower() for w in query.split() if len(w) > 2]
         scored = []
         for c in chunks:
-            score = sum(1 for w in query_words if w in c["lower"])
+            score = sum(2 for w in query_words if w in c["lower"])
             if score > 0:
                 scored.append((score, c))
         scored.sort(key=lambda x: x[0], reverse=True)

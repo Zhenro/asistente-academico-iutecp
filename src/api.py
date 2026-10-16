@@ -32,14 +32,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    try:
-        from src.config import CHROMA_DB_DIR
-    except ImportError:
-        from config import CHROMA_DB_DIR
-    sqlite_file = CHROMA_DB_DIR / "chroma.sqlite3"
-    if not sqlite_file.exists():
-        print("[*] Base vectorial no encontrada. Indexando automáticamente...")
-        build_vector_store()
+    print("[*] Precargando fragmentos de documentos en memoria...")
+    chunks = rag_engine._get_memory_chunks()
+    print(f"[OK] {len(chunks)} fragmentos precargados exitosamente en memoria.")
 
 
 class ChatRequest(BaseModel):
