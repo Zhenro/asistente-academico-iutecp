@@ -108,22 +108,33 @@ class RAGEngine:
         user_prompt = f"CONTEXTO OFICIAL DEL IUTECP:\n{context_text}\n\nPREGUNTA DEL ESTUDIANTE: {query}"
 
         # 2. Strategy A: Use Google Gemini if key available
-        if GEMINI_API_KEY and gemini_client:
-            models_to_try = [GEMINI_MODEL, "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.1-flash-lite"]
-            full_prompt = f"{system_instruction}\n\n{user_prompt}"
-            for candidate_model in models_to_try:
+        current_api_key = os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
+        if current_api_key:
+            client = gemini_client
+            if client is None and HAS_GEMINI:
                 try:
-                    response = gemini_client.models.generate_content(
-                        model=candidate_model,
-                        contents=full_prompt
-                    )
-                    if response and response.text:
-                        return {
-                            "answer": response.text,
-                            "sources": unique_sources
-                        }
+                    from google import genai
+                    client = genai.Client(api_key=current_api_key)
                 except Exception as e:
-                    print(f"[!] Error con {candidate_model}: {e}. Probando siguiente modelo...")
+                    print(f"[!] Error creando genai.Client: {e}")
+            
+            if client:
+                model_name = os.getenv("GEMINI_MODEL") or GEMINI_MODEL or "gemini-flash-lite-latest"
+                models_to_try = [model_name, "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-3.1-flash-lite"]
+                full_prompt = f"{system_instruction}\n\n{user_prompt}"
+                for candidate_model in models_to_try:
+                    try:
+                        response = client.models.generate_content(
+                            model=candidate_model,
+                            contents=full_prompt
+                        )
+                        if response and response.text:
+                            return {
+                                "answer": response.text,
+                                "sources": unique_sources
+                            }
+                    except Exception as e:
+                        print(f"[!] Error con {candidate_model}: {e}. Probando siguiente modelo...")
 
         # 3. Strategy B: Use OpenAI if key available
         if OPENAI_API_KEY and HAS_OPENAI:
