@@ -36,9 +36,14 @@ async def startup_event():
     chunks = rag_engine._get_memory_chunks()
     print(f"[OK] {len(chunks)} fragmentos precargados exitosamente en memoria.")
 
-    # Auto-registrar Webhook de Telegram si hay token y URL pública
+    # Auto-registrar Webhook de Telegram si hay token
     tg_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     ext_url = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("SERVER_PUBLIC_URL")
+    if not ext_url and os.getenv("RENDER_EXTERNAL_HOSTNAME"):
+        ext_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}"
+    if not ext_url and tg_token:
+        ext_url = "https://asistente-academico-iutecp.onrender.com"
+
     if tg_token and ext_url:
         webhook_target = f"{ext_url.rstrip('/')}/api/telegram-webhook"
         print(f"[*] Registrando webhook de Telegram: {webhook_target}")
@@ -175,6 +180,29 @@ async def telegram_status():
         "configured": configured,
         "webhook_url": webhook_url
     }
+
+
+@app.get("/api/telegram-setup")
+async def telegram_setup():
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        return {"status": "error", "message": "TELEGRAM_BOT_TOKEN no configurado en variables de entorno."}
+
+    ext_url = os.getenv("RENDER_EXTERNAL_URL") or os.getenv("SERVER_PUBLIC_URL")
+    if not ext_url and os.getenv("RENDER_EXTERNAL_HOSTNAME"):
+        ext_url = f"https://{os.getenv('RENDER_EXTERNAL_HOSTNAME')}"
+    if not ext_url:
+        ext_url = "https://asistente-academico-iutecp.onrender.com"
+
+    webhook_target = f"{ext_url.rstrip('/')}/api/telegram-webhook"
+    import urllib.request
+    try:
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/setWebhook?url={webhook_target}")
+        res = urllib.request.urlopen(req, timeout=8)
+        result = json.loads(res.read().decode())
+        return {"status": "success", "webhook_target": webhook_target, "telegram_response": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 
 @app.get("/api/documents")
