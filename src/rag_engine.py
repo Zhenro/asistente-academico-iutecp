@@ -54,27 +54,74 @@ class RAGEngine:
             )
         return col
 
+    def _get_memory_chunks(self):
+        if not hasattr(self, "_cached_chunks") or not self._cached_chunks:
+            self._cached_chunks = []
+            try:
+                from src.config import DOCUMENTS_DIR
+                from src.ingestion import extract_text_from_pdf, split_text_into_chunks
+            except ImportError:
+                from config import DOCUMENTS_DIR
+                from ingestion import extract_text_from_pdf, split_text_into_chunks
+            for pdf in DOCUMENTS_DIR.glob("*.pdf"):
+                pages = extract_text_from_pdf(pdf)
+                for p in pages:
+                    for c in split_text_into_chunks(p["text"], 120, 30):
+                        self._cached_chunks.append({
+                            "content": c,
+                            "source": pdf.name,
+                            "page": p["page"],
+                            "lower": c.lower()
+                        })
+        return self._cached_chunks
+
     def retrieve(self, query: str, top_k: int = TOP_K_RESULTS) -> List[Dict[str, Any]]:
-        collection = self.get_collection()
-        results = collection.query(
-            query_texts=[query],
-            n_results=top_k
-        )
-        
-        retrieved_docs = []
-        if results and "documents" in results and results["documents"]:
-            docs = results["documents"][0]
-            metadatas = results["metadatas"][0] if "metadatas" in results else [{}] * len(docs)
-            distances = results["distances"][0] if "distances" in results else [0] * len(docs)
-            
-            for doc, meta, dist in zip(docs, metadatas, distances):
-                retrieved_docs.append({
-                    "content": doc,
-                    "source": meta.get("source", "Documento Oficial IUTECP"),
-                    "page": meta.get("page", 1),
-                    "distance": dist
-                })
-        return retrieved_docs
+        # Intentar con ChromaDB
+        try:
+            collection = self.get_collection()
+            results = collection.query(
+                query_texts=[query],
+                n_results=top_k
+            )
+            if results and "documents" in results and results["documents"] and results["documents"][0]:
+                docs = results["documents"][0]
+                metas = results["metadatas"][0] if "metadatas" in results else [{}] * len(docs)
+                dists = results["distances"][0] if "distances" in results else [0] * len(docs)
+                retrieved = [
+                    {
+                        "content": doc,
+                        "source": meta.get("source", "Documento Oficial IUTECP"),
+                        "page": meta.get("page", 1),
+                        "distance": dist
+                    }
+                    for doc, meta, dist in zip(docs, metas, dists)
+                ]
+                if retrieved:
+                    return retrieved
+        except Exception as e:
+            print(f"[!] ChromaDB retrieval: {e}. Activando recuperacion directa ultrarrapida...")
+
+        # Estrategia de Respaldo Ultrarrápida en Memoria (1 milisegundo)
+        chunks = self._get_memory_chunks()
+        query_words = [w.lower() for w in query.split() if len(w) > 2]
+        scored = []
+        for c in chunks:
+            score = sum(1 for w in query_words if w in c["lower"])
+            if score > 0:
+                scored.append((score, c))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = [s[1] for s in scored[:top_k]]
+        if not top and chunks:
+            top = chunks[:top_k]
+        return [
+            {
+                "content": c["content"],
+                "source": c["source"],
+                "page": c["page"],
+                "distance": 0
+            }
+            for c in top
+        ]
 
     def generate_response(self, query: str) -> Dict[str, Any]:
         # 1. Retrieve relevant contexts
