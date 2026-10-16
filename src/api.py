@@ -2,7 +2,7 @@ import os
 import json
 import urllib.request
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -143,16 +143,8 @@ async def reset_session_endpoint(request: ResetRequest):
     return {"status": "success", "message": f"Sesión {request.session_id} reiniciada."}
 
 
-@app.post("/api/telegram-webhook")
-async def telegram_webhook(update: dict):
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    if not token:
-        return {"status": "ignored", "reason": "TELEGRAM_BOT_TOKEN no configurada"}
-    
-    message = update.get("message") or update.get("edited_message")
-    if not message:
-        return {"status": "ignored"}
-        
+def handle_telegram_message(token: str, message: dict):
+    """Procesa un mensaje de texto o audio de Telegram en segundo plano."""
     chat_id = message["chat"]["id"]
     user_name = message.get("from", {}).get("first_name", "Estudiante")
     session_id = f"tg_{chat_id}"
@@ -161,7 +153,7 @@ async def telegram_webhook(update: dict):
     voice = message.get("voice") or message.get("audio")
     is_voice = False
 
-    # Procesar Nota de Voz / Audio
+    # 1. Procesar Nota de Voz / Audio si no hay texto
     if not text and voice:
         send_telegram_chat_action(token, chat_id, "record_voice")
         try:
@@ -176,15 +168,16 @@ async def telegram_webhook(update: dict):
                 is_voice = True
             else:
                 send_telegram_message(token, chat_id, "⚠️ No logré escuchar con claridad la nota de voz. ¿Podrías grabarla de nuevo o escribir tu consulta?")
-                return {"status": "ok"}
+                return
         except Exception as e:
             print(f"[!] Error procesando nota de voz de Telegram: {e}")
-            send_telegram_message(token, chat_id, "⚠️ Ocurrió un error al procesar el audio. Por favor intenta de nuevo o escribe tu consulta en texto.")
-            return {"status": "ok"}
+            send_telegram_message(token, chat_id, "⚠️ Ocurrió un inconveniente al procesar el audio. Por favor intenta de nuevo o escribe tu consulta.")
+            return
 
     if not text:
-        return {"status": "ignored"}
+        return
 
+    # 2. Comandos especiales
     if text.startswith("/start"):
         welcome_msg = (
             f"¡Hola {user_name}! 👋\n\n"
@@ -198,14 +191,14 @@ async def telegram_webhook(update: dict):
             "¿Qué consulta tienes hoy? Escríbela o envíame un audio."
         )
         send_telegram_message(token, chat_id, welcome_msg)
-        return {"status": "ok"}
+        return
 
     if text.startswith("/reset"):
         rag_engine.clear_session(session_id)
         send_telegram_message(token, chat_id, "🔄 *Historial de conversación reiniciado.* ¿En qué otra consulta puedo orientarte?")
-        return {"status": "ok"}
+        return
 
-    # Procesar consulta con RAG y memoria multi-turno
+    # 3. Procesar consulta con RAG y memoria multi-turno
     send_telegram_chat_action(token, chat_id, "typing")
     result = rag_engine.generate_response(text, session_id=session_id)
     
@@ -217,6 +210,19 @@ async def telegram_webhook(update: dict):
         reply_text += "\n\n📚 *Fuentes oficiales:* " + ", ".join(result["sources"])
 
     send_telegram_message(token, chat_id, reply_text)
+
+
+@app.post("/api/telegram-webhook")
+async def telegram_webhook(update: dict, background_tasks: BackgroundTasks):
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        return {"status": "ignored", "reason": "TELEGRAM_BOT_TOKEN no configurada"}
+    
+    message = update.get("message") or update.get("edited_message")
+    if not message:
+        return {"status": "ignored"}
+
+    background_tasks.add_task(handle_telegram_message, token, message)
     return {"status": "ok"}
 
 
@@ -225,18 +231,21 @@ async def telegram_status():
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     configured = bool(token)
     webhook_url = None
+    telegram_info = {}
     if configured:
         import urllib.request
         try:
             req = urllib.request.Request(f"https://api.telegram.org/bot{token}/getWebhookInfo")
             res = urllib.request.urlopen(req, timeout=5)
             info = json.loads(res.read().decode())
-            webhook_url = info.get("result", {}).get("url")
+            telegram_info = info.get("result", {})
+            webhook_url = telegram_info.get("url")
         except Exception:
             pass
     return {
         "configured": configured,
-        "webhook_url": webhook_url
+        "webhook_url": webhook_url,
+        "telegram_info": telegram_info
     }
 
 

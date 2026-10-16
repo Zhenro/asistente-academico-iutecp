@@ -278,7 +278,21 @@ class RAGEngine:
             raise RuntimeError("Gemini Client no está configurado.")
         
         from google.genai import types
-        part = types.Part.from_bytes(data=audio_bytes, mime_type=mime_type)
+        
+        # Estandarizar mime_type para Gemini
+        m = (mime_type or "audio/ogg").lower()
+        if "mp3" in m or "mpeg" in m:
+            clean_mime = "audio/mp3"
+        elif "wav" in m:
+            clean_mime = "audio/wav"
+        elif "m4a" in m or "aac" in m:
+            clean_mime = "audio/aac"
+        elif "flac" in m:
+            clean_mime = "audio/flac"
+        else:
+            clean_mime = "audio/ogg"
+
+        part = types.Part.from_bytes(data=audio_bytes, mime_type=clean_mime)
         prompt = (
             "Eres el asistente de transcripción académica para el instituto universitario IUTECP. "
             "Escucha este audio y transcribe textualmente en español la pregunta o comentario del estudiante. "
