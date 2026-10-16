@@ -44,13 +44,7 @@ def build_vector_store():
     # Use Chroma's default lightweight embedding function (runs locally)
     emb_fn = embedding_functions.DefaultEmbeddingFunction()
     
-    # Get or recreate collection
-    try:
-        client.delete_collection(name="iutecp_knowledge_base")
-    except Exception:
-        pass
-    
-    collection = client.create_collection(
+    collection = client.get_or_create_collection(
         name="iutecp_knowledge_base",
         embedding_function=emb_fn,
         metadata={"description": "Documentos normativos y guias oficiales IUTECP"}
@@ -87,7 +81,7 @@ def build_vector_store():
         # Add to ChromaDB in batches
         batch_size = 50
         for i in range(0, len(all_documents), batch_size):
-            collection.add(
+            collection.upsert(
                 ids=all_ids[i:i + batch_size],
                 documents=all_documents[i:i + batch_size],
                 metadatas=all_metadatas[i:i + batch_size]

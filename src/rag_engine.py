@@ -35,13 +35,28 @@ class RAGEngine:
     def __init__(self):
         self.client = chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
         self.emb_fn = embedding_functions.DefaultEmbeddingFunction()
-        self.collection = self.client.get_or_create_collection(
+
+    def get_collection(self):
+        col = self.client.get_or_create_collection(
             name="iutecp_knowledge_base",
             embedding_function=self.emb_fn
         )
+        if col.count() == 0:
+            print("[*] Base vectorial vacia detectada. Indexando documentos...")
+            try:
+                from src.ingestion import build_vector_store
+            except ImportError:
+                from ingestion import build_vector_store
+            build_vector_store()
+            col = self.client.get_or_create_collection(
+                name="iutecp_knowledge_base",
+                embedding_function=self.emb_fn
+            )
+        return col
 
     def retrieve(self, query: str, top_k: int = TOP_K_RESULTS) -> List[Dict[str, Any]]:
-        results = self.collection.query(
+        collection = self.get_collection()
+        results = collection.query(
             query_texts=[query],
             n_results=top_k
         )
