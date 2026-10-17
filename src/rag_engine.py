@@ -300,20 +300,35 @@ class RAGEngine:
 
         part = types.Part.from_bytes(data=audio_bytes, mime_type=clean_mime)
         prompt = (
-            "Eres el asistente de transcripción académica para el instituto universitario IUTECP. "
-            "Escucha este audio y transcribe textualmente en español la pregunta o comentario del estudiante. "
-            "Responde ÚNICAMENTE con la transcripción exacta, sin saludos, sin explicaciones ni comillas adicionales."
+            "Eres el transcriptor del Asistente Académico del Instituto Universitario de Tecnología 'Elías Calixto Pompa' (IUTECP) en Venezuela.\n"
+            "Tu tarea es transcribir textualmente en español la nota de voz o consulta enviada por el estudiante.\n\n"
+            "GLOSARIO OBLIGATORIO Y REGLAS DE CORRECCIÓN FONÉTICA:\n"
+            "• 'Cashea': Método de pago en cuotas del IUTECP. Si el estudiante dice 'caché', 'cashe', 'cajea' o 'cash', DEBES transcribirlo como 'Cashea'.\n"
+            "• 'TernaNet': Sistema y portal del IUTECP. Si suena 'internet', 'ternanet', 'tierranet', transcribe 'TernaNet'.\n"
+            "• 'IUTECP': Siglas del instituto.\n"
+            "• 'PI': Pérdida de materia por inasistencias.\n"
+            "• Sedes: Guatire, Caracas, Barcelona, Puerto La Cruz, Anzoátegui.\n"
+            "• Carreras: Informática, Administración, Contaduría, Publicidad, Mercadeo.\n"
+            "• Términos frecuentes: Servicio Comunitario, Pasantías, Solvencias, Pensum, Grado, Semestre, Materias preladas, Arancel.\n\n"
+            "INSTRUCCIONES:\n"
+            "1. Transcribe con total exactitud lo que dice el hablante, aplicando el glosario institucional para nombres propios y términos clave.\n"
+            "2. Responde ÚNICAMENTE con la transcripción exacta. No agregues saludos, explicaciones, comillas ni texto introductorio."
         )
         try:
+            from google.genai import types as genai_types
+            config = genai_types.GenerateContentConfig(
+                temperature=0.0
+            )
             response = gemini_client.models.generate_content(
                 model=GEMINI_MODEL,
-                contents=[part, prompt]
+                contents=[part, prompt],
+                config=config
             )
             if response and response.text:
                 return response.text.strip().strip('"').strip("'")
             return ""
         except Exception as e:
-            print(f"[!] Error transcribiendo audio con Gemini: {e}")
+            print(f"[!] Error transcribiendo audio con Gemini ({GEMINI_MODEL}): {e}")
             raise
 
 

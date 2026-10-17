@@ -164,52 +164,49 @@ async def reset_session_endpoint(request: ResetRequest):
     return {"status": "success", "message": f"Sesión {request.session_id} reiniciada."}
 
 
-@app.post("/api/telegram-webhook")
-async def telegram_webhook(update: dict):
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    if not token:
-        return {"status": "ignored", "reason": "TELEGRAM_BOT_TOKEN no configurada"}
-    
-    message = update.get("message") or update.get("edited_message")
-    if not message:
-        return {"status": "ignored"}
-        
+def handle_telegram_message_async(token: str, message: dict):
+    """Procesa mensajes de texto y notas de voz en segundo plano sin bloquear el webhook."""
     chat_id = message["chat"]["id"]
     user_name = message.get("from", {}).get("first_name", "Estudiante")
     session_id = f"tg_{chat_id}"
 
     text = message.get("text", "").strip() if message.get("text") else None
-    voice = message.get("voice") or message.get("audio")
+    voice = message.get("voice") or message.get("audio") or message.get("video_note")
     is_voice = False
 
-    # 1. Procesar Nota de Voz / Audio si no hay texto
+    # CASO AUDIO / NOTA DE VOZ
     if not text and voice:
+        send_telegram_chat_action(token, chat_id, "record_voice")
         try:
             file_id = voice.get("file_id")
             mime_type = voice.get("mime_type", "audio/ogg")
             audio_bytes = download_telegram_file(token, file_id)
+            
+            send_telegram_chat_action(token, chat_id, "typing")
             transcription = rag_engine.transcribe_audio(audio_bytes, mime_type=mime_type)
             if transcription:
                 text = transcription
                 is_voice = True
             else:
-                return {
-                    "method": "sendMessage",
-                    "chat_id": chat_id,
-                    "text": "⚠️ No logré escuchar con claridad la nota de voz. ¿Podrías grabarla de nuevo o escribir tu consulta?"
-                }
+                send_telegram_message(
+                    token, 
+                    chat_id, 
+                    "⚠️ No logré escuchar con claridad la nota de voz. Por favor intenta grabarla de nuevo o escribe tu consulta."
+                )
+                return
         except Exception as e:
-            print(f"[!] Error procesando audio de Telegram: {e}")
-            return {
-                "method": "sendMessage",
-                "chat_id": chat_id,
-                "text": "⚠️ Ocurrió un error al procesar el audio. Por favor intenta de nuevo o escribe tu consulta en texto."
-            }
+            print(f"[!] Error procesando nota de voz de Telegram: {e}")
+            send_telegram_message(
+                token, 
+                chat_id, 
+                "⚠️ Ocurrió un inconveniente al procesar la nota de voz. Por favor intenta enviarla de nuevo o escribe tu consulta en texto."
+            )
+            return
 
     if not text:
-        return {"status": "ignored"}
+        return
 
-    # 2. Comandos especiales
+    # COMANDOS ESPECIALES
     if text.startswith("/start"):
         welcome_msg = (
             f"¡Hola {user_name}! 👋\n\n"
@@ -222,23 +219,16 @@ async def telegram_webhook(update: dict):
             "• 🎓 Servicio comunitario, pasantías y grado\n\n"
             "¿Qué consulta tienes hoy? Escríbela o envíame un audio."
         )
-        return {
-            "method": "sendMessage",
-            "chat_id": chat_id,
-            "text": welcome_msg,
-            "parse_mode": "Markdown"
-        }
+        send_telegram_message(token, chat_id, welcome_msg)
+        return
 
     if text.startswith("/reset"):
         rag_engine.clear_session(session_id)
-        return {
-            "method": "sendMessage",
-            "chat_id": chat_id,
-            "text": "🔄 *Historial de conversación reiniciado.* ¿En qué otra consulta puedo orientarte?",
-            "parse_mode": "Markdown"
-        }
+        send_telegram_message(token, chat_id, "🔄 *Historial de conversación reiniciado.* ¿En qué otra consulta puedo orientarte?")
+        return
 
-    # 3. Procesar consulta con RAG y memoria multi-turno
+    # GENERAR RESPUESTA RAG
+    send_telegram_chat_action(token, chat_id, "typing")
     result = rag_engine.generate_response(text, session_id=session_id)
     
     reply_text = ""
@@ -248,13 +238,22 @@ async def telegram_webhook(update: dict):
     if result.get("sources"):
         reply_text += "\n\n📚 *Fuentes oficiales:* " + ", ".join(result["sources"])
 
-    # Respuesta directa en el cuerpo HTTP del Webhook (cero cuelgues salientes)
-    return {
-        "method": "sendMessage",
-        "chat_id": chat_id,
-        "text": reply_text,
-        "parse_mode": "Markdown"
-    }
+    send_telegram_message(token, chat_id, reply_text)
+
+
+@app.post("/api/telegram-webhook")
+async def telegram_webhook(update: dict, background_tasks: BackgroundTasks):
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    if not token:
+        return {"status": "ignored", "reason": "TELEGRAM_BOT_TOKEN no configurada"}
+    
+    message = update.get("message") or update.get("edited_message")
+    if not message:
+        return {"status": "ignored"}
+
+    # Responder 200 OK inmediatamente a Telegram y procesar en segundo plano
+    background_tasks.add_task(handle_telegram_message_async, token, message)
+    return {"status": "ok"}
 
 
 @app.get("/api/telegram-status")
