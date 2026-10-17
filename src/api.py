@@ -2,8 +2,17 @@ import os
 import json
 import urllib.request
 import re
+import socket
 from datetime import datetime
 from pathlib import Path
+
+# Forzar resolución IPv4 para peticiones salientes (evita que Linux/Render cuelgue en IPv6 sin ruta)
+_orig_getaddrinfo = socket.getaddrinfo
+def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
+    if host and "telegram.org" in str(host):
+        family = socket.AF_INET
+    return _orig_getaddrinfo(host, port, family, type, proto, flags)
+socket.getaddrinfo = _getaddrinfo_ipv4
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -51,11 +60,15 @@ async def startup_event():
     if tg_token and ext_url:
         webhook_target = f"{ext_url.rstrip('/')}/api/telegram-webhook"
         print(f"[*] Registrando webhook de Telegram: {webhook_target}")
-        try:
-            res_data = telegram_api_call(tg_token, f"setWebhook?url={webhook_target}", timeout=25)
-            print(f"[OK] Webhook de Telegram registrado: {res_data}")
-        except Exception as e:
-            print(f"[!] Error registrando webhook de Telegram: {e}")
+        import asyncio
+        async def _register_webhook_bg():
+            try:
+                loop = asyncio.get_running_loop()
+                res_data = await loop.run_in_executor(None, telegram_api_call, tg_token, f"setWebhook?url={webhook_target}", None, 20)
+                print(f"[OK] Webhook de Telegram registrado: {res_data}")
+            except Exception as e:
+                print(f"[!] Error registrando webhook de Telegram: {e}")
+        asyncio.create_task(_register_webhook_bg())
 
 
 class ChatRequest(BaseModel):
