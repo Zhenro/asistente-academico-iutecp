@@ -9,8 +9,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 # Paths
-DOCUMENTS_DIR = BASE_DIR / "data" / "documents"
-CHROMA_DB_DIR = BASE_DIR / "data" / "chroma_db"
+DATA_DIR = BASE_DIR / "data"
+DOCUMENTS_DIR = DATA_DIR / "documents"
+CHROMA_DB_DIR = DATA_DIR / "chroma_db"
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 # Ensure directories exist

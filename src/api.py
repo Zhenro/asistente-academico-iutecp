@@ -15,7 +15,7 @@ def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
 socket.getaddrinfo = _getaddrinfo_ipv4
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -23,10 +23,12 @@ try:
     from src.config import FRONTEND_DIR, DOCUMENTS_DIR
     from src.rag_engine import rag_engine
     from src.ingestion import build_vector_store
+    import src.analytics as analytics
 except ImportError:
     from config import FRONTEND_DIR, DOCUMENTS_DIR
     from rag_engine import rag_engine
     from ingestion import build_vector_store
+    import analytics
 
 app = FastAPI(
     title="IUTECP - Asistente Virtual Académico",
@@ -83,6 +85,7 @@ class ResetRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     sources: List[str]
+    query_id: Optional[str] = None
 
 
 def telegram_api_call(token: str, method: str, payload: dict = None, timeout: int = 20) -> dict:
@@ -150,9 +153,16 @@ async def chat_endpoint(request: ChatRequest):
     
     try:
         result = rag_engine.generate_response(request.message, session_id=request.session_id)
+        query_id = analytics.record_query(
+            query=request.message,
+            channel="web",
+            answer=result["answer"],
+            sources=result.get("sources", [])
+        )
         return ChatResponse(
             answer=result["answer"],
-            sources=result["sources"]
+            sources=result["sources"],
+            query_id=query_id
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar consulta: {str(e)}")
@@ -231,6 +241,13 @@ def handle_telegram_message_async(token: str, message: dict):
     send_telegram_chat_action(token, chat_id, "typing")
     result = rag_engine.generate_response(text, session_id=session_id)
     
+    analytics.record_query(
+        query=text,
+        channel="telegram",
+        answer=result["answer"],
+        sources=result.get("sources", [])
+    )
+
     reply_text = ""
     if is_voice:
         reply_text += f"🎙️ *Escuché:* \"_{text}_\"\n\n"
@@ -434,6 +451,44 @@ async def trigger_reindex():
         return {"status": "success", "message": f"Se reindexaron {count} fragmentos con éxito."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error durante reindexación: {str(e)}")
+
+
+class FeedbackRequest(BaseModel):
+    query_id: str
+    rating: str  # "up" or "down"
+    comment: Optional[str] = None
+
+
+@app.post("/api/feedback")
+async def submit_feedback(req: FeedbackRequest):
+    if req.rating not in ["up", "down"]:
+        raise HTTPException(status_code=400, detail="Calificación debe ser 'up' o 'down'.")
+    success = analytics.record_feedback(req.query_id, req.rating, req.comment)
+    return {"status": "success" if success else "not_found"}
+
+
+@app.get("/api/admin/analytics")
+async def admin_get_analytics(x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    return analytics.get_analytics_summary()
+
+
+@app.get("/api/admin/analytics/export")
+async def admin_export_analytics_csv(x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    csv_content = analytics.export_csv()
+    return PlainTextResponse(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="reporte_consultas_iutecp.csv"'}
+    )
+
+
+@app.delete("/api/admin/analytics/reset")
+async def admin_reset_analytics(x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    analytics.reset_analytics()
+    return {"status": "success", "message": "Historial de analítica reseteado exitosamente."}
 
 
 if __name__ == "__main__":

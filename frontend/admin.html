@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>IUTECP - Panel de Gestión Académica (Secretaría)</title>
+  <title>IUTECP - Panel de Gestión Académica y Analítica</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -143,10 +143,51 @@
       border-color: var(--danger);
     }
 
+    .btn-success {
+      background: var(--success);
+      color: #ffffff;
+    }
+    .btn-success:hover {
+      background: #047857;
+    }
+
+    /* PESTAÑAS DE NAVEGACIÓN (TABS) */
+    .nav-tabs-bar {
+      background: #ffffff;
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex;
+      gap: 20px;
+    }
+
+    .nav-tab-btn {
+      padding: 14px 4px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-tab-btn:hover {
+      color: var(--primary);
+    }
+
+    .nav-tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
     /* CONTENEDOR PRINCIPAL */
     main {
       flex: 1;
-      max-width: 1100px;
+      max-width: 1120px;
       width: 100%;
       margin: 0 auto;
       padding: 24px 20px 60px;
@@ -155,10 +196,20 @@
       gap: 24px;
     }
 
+    .tab-content {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .tab-content.hidden {
+      display: none;
+    }
+
     /* TARJETAS DE MÉTRICAS */
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
       gap: 16px;
     }
 
@@ -174,18 +225,20 @@
     }
 
     .metric-icon {
-      width: 46px;
-      height: 46px;
+      width: 48px;
+      height: 48px;
       border-radius: var(--radius-sm);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.4rem;
+      font-size: 1.45rem;
+      flex-shrink: 0;
     }
 
     .metric-icon.blue { background: var(--primary-light); color: var(--primary); }
     .metric-icon.amber { background: var(--accent-soft); color: var(--accent); }
     .metric-icon.green { background: var(--success-soft); color: var(--success); }
+    .metric-icon.red { background: var(--danger-soft); color: var(--danger); }
 
     .metric-data h3 {
       font-size: 1.45rem;
@@ -201,8 +254,27 @@
       margin-top: 2px;
     }
 
-    /* ZONA DE CARGA DE DOCUMENTOS (DRAG & DROP) */
-    .upload-card {
+    .metric-sub {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      display: flex;
+      gap: 6px;
+    }
+
+    .tag-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .tag-blue { background: #dbeafe; color: #1e40af; }
+    .tag-green { background: #dcfce7; color: #15803d; }
+    .tag-red { background: #fee2e2; color: #991b1b; }
+
+    /* TARJETAS DE CONTENIDO */
+    .card {
       background: #ffffff;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
@@ -215,6 +287,8 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 16px;
+      flex-wrap: wrap;
+      gap: 12px;
     }
 
     .card-title-row h2 {
@@ -226,6 +300,7 @@
       gap: 8px;
     }
 
+    /* ZONA DE CARGA DE DOCUMENTOS (DRAG & DROP) */
     .dropzone {
       border: 2px dashed #cbd5e1;
       border-radius: var(--radius-md);
@@ -263,15 +338,7 @@
       display: none;
     }
 
-    /* TABLA DE DOCUMENTOS */
-    .docs-card {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: 24px;
-      box-shadow: var(--shadow-sm);
-    }
-
+    /* TABLA */
     .table-container {
       overflow-x: auto;
       margin-top: 12px;
@@ -296,7 +363,7 @@
     }
 
     td {
-      padding: 14px;
+      padding: 13px 14px;
       border-bottom: 1px solid var(--border);
       color: var(--text-main);
     }
@@ -330,6 +397,40 @@
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+
+    /* GRÁFICO DE TOP TEMAS */
+    .topic-bar-row {
+      margin-bottom: 14px;
+    }
+
+    .topic-bar-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .topic-progress-bg {
+      background: #e2e8f0;
+      border-radius: 6px;
+      height: 9px;
+      overflow: hidden;
+    }
+
+    .topic-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #2563eb);
+      border-radius: 6px;
+      transition: width 0.5s ease;
+    }
+
+    /* DOS COLUMNAS EN ANALÍTICA */
+    .analytics-split {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
     }
 
     /* MODAL DE LOGIN */
@@ -470,7 +571,7 @@
       <div class="brand-logo">IU</div>
       <div class="brand-text">
         <h1>IUTECP · Secretaría Académica</h1>
-        <p>Panel de Gestión de Conocimiento RAG y Reglamentos</p>
+        <p>Panel de Gestión de Conocimiento RAG y Analítica Institucional</p>
       </div>
     </div>
     <div class="header-actions">
@@ -483,91 +584,228 @@
     </div>
   </header>
 
+  <!-- PESTAÑAS DE NAVEGACIÓN -->
+  <div class="nav-tabs-bar">
+    <button class="nav-tab-btn active" id="tabBtnDocs" onclick="switchTab('docs')">
+      <span>📁 Gestión de Documentos PDF</span>
+    </button>
+    <button class="nav-tab-btn" id="tabBtnAnalytics" onclick="switchTab('analytics')">
+      <span>📊 Analítica y Vacíos Normativos</span>
+    </button>
+  </div>
+
   <main>
-    <!-- RESUMEN DE MÉTRICAS -->
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-icon blue">📚</div>
-        <div class="metric-data">
-          <h3 id="statDocsCount">-</h3>
-          <p>Documentos Normativos</p>
+    <!-- ==========================================
+         PESTAÑA 1: GESTIÓN DE DOCUMENTOS
+         ========================================== -->
+    <div class="tab-content" id="tabDocs">
+      <!-- RESUMEN DE MÉTRICAS RAG -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-icon blue">📚</div>
+          <div class="metric-data">
+            <h3 id="statDocsCount">-</h3>
+            <p>Documentos Normativos</p>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon amber">🧩</div>
+          <div class="metric-data">
+            <h3 id="statChunksCount">-</h3>
+            <p>Fragmentos Indexados en RAG</p>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon green">⚡</div>
+          <div class="metric-data">
+            <h3>&lt; 35 MB</h3>
+            <p>Memoria RAM en la Nube</p>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon blue">📱</div>
+          <div class="metric-data">
+            <h3>@IutecpAsistenteBot</h3>
+            <p>Telegram 24/7 Conectado</p>
+          </div>
         </div>
       </div>
 
-      <div class="metric-card">
-        <div class="metric-icon amber">🧩</div>
-        <div class="metric-data">
-          <h3 id="statChunksCount">-</h3>
-          <p>Fragmentos Indexados en RAG</p>
+      <!-- SUBIR NUEVO DOCUMENTO -->
+      <div class="card">
+        <div class="card-title-row">
+          <h2>
+            <span>📤 Cargar Nuevo Documento Oficial</span>
+          </h2>
+          <button class="btn btn-secondary" onclick="triggerReindex()" id="reindexBtn">
+            <span>🔄 Reindexar Todo en Caliente</span>
+          </button>
+        </div>
+
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+          <div class="dropzone-icon">📄</div>
+          <h4>Arrastra aquí un archivo PDF o haz clic para seleccionarlo</h4>
+          <p>Normativas, calendarios de exámenes, circulares o instructivos oficiales (Formato .PDF)</p>
+          <input type="file" id="fileInput" accept=".pdf" onchange="uploadSelectedFile(event)">
         </div>
       </div>
 
-      <div class="metric-card">
-        <div class="metric-icon green">⚡</div>
-        <div class="metric-data">
-          <h3>&lt; 35 MB</h3>
-          <p>Memoria RAM en la Nube</p>
+      <!-- LISTADO DE DOCUMENTOS ACTIVOS -->
+      <div class="card">
+        <div class="card-title-row">
+          <h2>
+            <span>📋 Inventario de Documentos Activos en el Asistente</span>
+          </h2>
+          <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500;">
+            Los cambios se sincronizan en segundos con la Web y con Telegram
+          </span>
         </div>
-      </div>
 
-      <div class="metric-card">
-        <div class="metric-icon blue">📱</div>
-        <div class="metric-data">
-          <h3>@IutecpAsistenteBot</h3>
-          <p>Telegram 24/7 Conectado</p>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre del Documento</th>
+                <th>Tamaño</th>
+                <th>Páginas</th>
+                <th>Última Modificación</th>
+                <th style="text-align: right;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="documentsTableBody">
+              <tr>
+                <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                  Cargando inventario de normativas...
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <!-- SUBIR NUEVO DOCUMENTO -->
-    <div class="upload-card">
-      <div class="card-title-row">
-        <h2>
-          <span>📤 Cargar Nuevo Documento Oficial</span>
-        </h2>
-        <button class="btn btn-secondary" onclick="triggerReindex()" id="reindexBtn">
-          <span>🔄 Reindexar Todo en Caliente</span>
-        </button>
+    <!-- ==========================================
+         PESTAÑA 2: ANALÍTICA Y VACÍOS NORMATIVOS
+         ========================================== -->
+    <div class="tab-content hidden" id="tabAnalytics">
+      <!-- MÉTRICAS DE CONSULTAS -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-icon blue">💬</div>
+          <div class="metric-data">
+            <h3 id="statTotalQueries">0</h3>
+            <p>Consultas Estudiantiles</p>
+            <div class="metric-sub">
+              <span class="tag-badge tag-blue" id="statWebCount">Web: 0</span>
+              <span class="tag-badge tag-green" id="statTgCount">TG: 0</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon green">⭐</div>
+          <div class="metric-data">
+            <h3 id="statSatisfactionRate">100%</h3>
+            <p>Índice de Aprobación</p>
+            <div class="metric-sub" id="statRatingsCount">0 votos registrados</div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon red">🚨</div>
+          <div class="metric-data">
+            <h3 id="statTotalGaps">0</h3>
+            <p>Vacíos Normativos</p>
+            <div class="metric-sub">Dudas sin respuesta en los PDFs</div>
+          </div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-icon amber">⏱️</div>
+          <div class="metric-data">
+            <h3>~1.2s</h3>
+            <p>Velocidad de Respuesta</p>
+            <div class="metric-sub">RAG Ultraliviano</div>
+          </div>
+        </div>
       </div>
 
-      <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-        <div class="dropzone-icon">📄</div>
-        <h4>Arrastra aquí un archivo PDF o haz clic para seleccionarlo</h4>
-        <p>Normativas, calendarios de exámenes, circulares o instructivos oficiales (Formato .PDF)</p>
-        <input type="file" id="fileInput" accept=".pdf" onchange="uploadSelectedFile(event)">
-      </div>
-    </div>
+      <!-- SECCIÓN DIVIDIDA: TOP TEMAS + VACÍOS NORMATIVOS -->
+      <div class="analytics-split">
+        <!-- TOP TEMAS MÁS CONSULTADOS -->
+        <div class="card">
+          <div class="card-title-row">
+            <h2><span>🔥 Temas Más Consultados</span></h2>
+          </div>
+          <div id="topicsContainer">
+            <p style="color:var(--text-muted); font-size:0.84rem;">Cargando temas frecuentes...</p>
+          </div>
+        </div>
 
-    <!-- LISTADO DE DOCUMENTOS ACTIVOS -->
-    <div class="docs-card">
-      <div class="card-title-row">
-        <h2>
-          <span>📋 Inventario de Documentos Activos en el Asistente</span>
-        </h2>
-        <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500;">
-          Los cambios se sincronizan en segundos con la Web y con Telegram
-        </span>
+        <!-- BANDEJA DE VACÍOS NORMATIVOS -->
+        <div class="card">
+          <div class="card-title-row">
+            <h2><span>⚠️ Dudas Sin Respuesta (Vacíos)</span></h2>
+            <span style="font-size:0.75rem; color:var(--text-muted);">Alertas para Secretaría</span>
+          </div>
+          <p style="font-size:0.78rem; color:var(--text-muted); margin-bottom:12px;">
+            Preguntas realizadas por estudiantes sobre temas <strong>no contemplados</strong> en los PDFs actuales:
+          </p>
+          <div class="table-container" style="max-height: 280px; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pregunta del Estudiante</th>
+                  <th>Canal</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
+              <tbody id="gapsTableBody">
+                <tr><td colspan="3" style="text-align:center; color:var(--text-muted);">Sin vacíos detectados</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre del Documento</th>
-              <th>Tamaño</th>
-              <th>Páginas</th>
-              <th>Última Modificación</th>
-              <th style="text-align: right;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="documentsTableBody">
-            <tr>
-              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
-                Cargando inventario de normativas...
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- REGISTRO DE CONSULTAS RECIENTES -->
+      <div class="card">
+        <div class="card-title-row">
+          <h2><span>🕒 Registro de Consultas Recientes</span></h2>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-success" onclick="downloadCSVReport()">
+              <span>📥 Exportar CSV (Excel)</span>
+            </button>
+            <button class="btn btn-secondary" onclick="resetAnalyticsConfirm()">
+              <span>🗑️ Limpiar Historial</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha y Hora</th>
+                <th>Canal</th>
+                <th>Tema Clasificado</th>
+                <th>Consulta Estudiantil</th>
+                <th>Estado</th>
+                <th>Voto</th>
+              </tr>
+            </thead>
+            <tbody id="recentQueriesTableBody">
+              <tr>
+                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                  Cargando registro de consultas...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </main>
@@ -576,6 +814,7 @@
 
   <script>
     let adminToken = localStorage.getItem('iutecp_admin_key') || '';
+    let currentTab = 'docs';
 
     // Inicialización
     document.addEventListener('DOMContentLoaded', () => {
@@ -587,6 +826,28 @@
 
       setupDragAndDrop();
     });
+
+    function switchTab(tab) {
+      currentTab = tab;
+      const tabDocs = document.getElementById('tabDocs');
+      const tabAnalytics = document.getElementById('tabAnalytics');
+      const btnDocs = document.getElementById('tabBtnDocs');
+      const btnAnalytics = document.getElementById('tabBtnAnalytics');
+
+      if (tab === 'docs') {
+        tabDocs.classList.remove('hidden');
+        tabAnalytics.classList.add('hidden');
+        btnDocs.classList.add('active');
+        btnAnalytics.classList.remove('active');
+        loadDocuments();
+      } else {
+        tabDocs.classList.add('hidden');
+        tabAnalytics.classList.remove('hidden');
+        btnDocs.classList.remove('active');
+        btnAnalytics.classList.add('active');
+        loadAnalytics();
+      }
+    }
 
     async function handleLogin(e) {
       e.preventDefault();
@@ -695,6 +956,135 @@
       });
     }
 
+    async function loadAnalytics() {
+      try {
+        const res = await fetch('/api/admin/analytics', {
+          headers: { 'x-admin-key': adminToken }
+        });
+        if (res.ok) {
+          renderAnalytics(await res.json());
+        }
+      } catch (err) {
+        console.error('Error cargando analítica:', err);
+      }
+    }
+
+    function renderAnalytics(data) {
+      document.getElementById('statTotalQueries').textContent = data.total_queries;
+      document.getElementById('statWebCount').textContent = `Web: ${data.channels.web}`;
+      document.getElementById('statTgCount').textContent = `TG: ${data.channels.telegram}`;
+
+      document.getElementById('statSatisfactionRate').textContent = `${data.satisfaction.rate}%`;
+      document.getElementById('statRatingsCount').textContent = `${data.satisfaction.total_rated} votos (${data.satisfaction.up} 👍 / ${data.satisfaction.down} 👎)`;
+
+      document.getElementById('statTotalGaps').textContent = data.total_gaps;
+
+      // Render Top Temas
+      const topicsDiv = document.getElementById('topicsContainer');
+      topicsDiv.innerHTML = '';
+      if (!data.topics || data.topics.length === 0) {
+        topicsDiv.innerHTML = '<p style="color:var(--text-muted); font-size:0.84rem;">Aún no hay suficientes consultas registradas.</p>';
+      } else {
+        data.topics.forEach(t => {
+          const row = document.createElement('div');
+          row.className = 'topic-bar-row';
+          row.innerHTML = `
+            <div class="topic-bar-header">
+              <span>${t.topic}</span>
+              <span style="color:var(--text-muted);">${t.count} (${t.percent}%)</span>
+            </div>
+            <div class="topic-progress-bg">
+              <div class="topic-progress-fill" style="width: ${t.percent}%;"></div>
+            </div>
+          `;
+          topicsDiv.appendChild(row);
+        });
+      }
+
+      // Render Vacíos Normativos
+      const gapsTbody = document.getElementById('gapsTableBody');
+      gapsTbody.innerHTML = '';
+      if (!data.gaps || data.gaps.length === 0) {
+        gapsTbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--text-muted); padding:16px;">✓ ¡Excelente! Todas las consultas estudiantiles han sido resueltas con los reglamentos actuales.</td></tr>';
+      } else {
+        data.gaps.forEach(g => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-weight:600; color:var(--danger);">${g.query}</td>
+            <td><span class="tag-badge ${g.channel === 'telegram' ? 'tag-green' : 'tag-blue'}">${g.channel.toUpperCase()}</span></td>
+            <td style="font-size:0.75rem; color:var(--text-muted);">${g.timestamp}</td>
+          `;
+          gapsTbody.appendChild(tr);
+        });
+      }
+
+      // Render Consultas Recientes
+      const recentTbody = document.getElementById('recentQueriesTableBody');
+      recentTbody.innerHTML = '';
+      if (!data.recent_queries || data.recent_queries.length === 0) {
+        recentTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">Sin consultas recientes.</td></tr>';
+      } else {
+        data.recent_queries.forEach(q => {
+          const tr = document.createElement('tr');
+          let ratingBadge = '<span style="color:var(--text-muted);">-</span>';
+          if (q.rating === 'up') ratingBadge = '<span style="color:var(--success); font-weight:700;">👍 Útil</span>';
+          if (q.rating === 'down') ratingBadge = '<span style="color:var(--danger); font-weight:700;">👎 Insatisfecho</span>';
+
+          const gapBadge = q.is_gap 
+            ? '<span class="tag-badge tag-red">Vacío</span>' 
+            : '<span class="tag-badge tag-green">Respondida</span>';
+
+          tr.innerHTML = `
+            <td style="font-size:0.76rem; color:var(--text-muted);">${q.timestamp}</td>
+            <td><span class="tag-badge ${q.channel === 'telegram' ? 'tag-green' : 'tag-blue'}">${q.channel.toUpperCase()}</span></td>
+            <td><strong>${q.topic}</strong></td>
+            <td style="max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${q.query}">${q.query}</td>
+            <td>${gapBadge}</td>
+            <td>${ratingBadge}</td>
+          `;
+          recentTbody.appendChild(tr);
+        });
+      }
+    }
+
+    async function downloadCSVReport() {
+      try {
+        const res = await fetch('/api/admin/analytics/export', {
+          headers: { 'x-admin-key': adminToken }
+        });
+        if (!res.ok) throw new Error('Error al descargar');
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reporte_consultas_iutecp_${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        showToast('Reporte CSV descargado con éxito.', 'success');
+      } catch (err) {
+        showToast('Error al exportar reporte CSV.', 'danger');
+      }
+    }
+
+    async function resetAnalyticsConfirm() {
+      if (!confirm('¿Deseas reiniciar y vaciar el historial de analítica y consultas? Esta acción no se puede deshacer.')) {
+        return;
+      }
+      try {
+        const res = await fetch('/api/admin/analytics/reset', {
+          method: 'DELETE',
+          headers: { 'x-admin-key': adminToken }
+        });
+        if (res.ok) {
+          showToast('Historial de analítica vaciado.', 'success');
+          loadAnalytics();
+        }
+      } catch (err) {
+        showToast('Error al resetear analítica.', 'danger');
+      }
+    }
+
     async function uploadSelectedFile(e) {
       const file = e.target.files[0];
       if (!file) return;
@@ -754,7 +1144,6 @@
     }
 
     function downloadDocument(name) {
-      // Descarga usando x-admin-key por fetch
       fetch(`/api/admin/documents/${encodeURIComponent(name)}/download`, {
         headers: { 'x-admin-key': adminToken }
       })

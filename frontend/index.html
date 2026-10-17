@@ -602,8 +602,34 @@
 
     .bubble-footer-actions {
       display: flex;
-      justify-content: flex-end;
-      margin-top: 6px;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .feedback-btn-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .feedback-btn {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-size: 0.76rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      line-height: 1.2;
+    }
+
+    .feedback-btn:hover {
+      background: #f1f5f9;
+      border-color: var(--primary);
+      transform: scale(1.1);
     }
 
     .copy-action-btn {
@@ -1046,7 +1072,7 @@
         loadingRow.remove();
 
         if (response.ok) {
-          appendBubble('bot', data.answer, data.sources);
+          appendBubble('bot', data.answer, data.sources, data.query_id);
         } else {
           appendBubble('bot', '⚠️ Disculpa, ocurrió un error momentáneo al consultar la base de datos. Por favor intenta de nuevo.');
         }
@@ -1059,7 +1085,7 @@
       }
     }
 
-    function appendBubble(role, content, sources = []) {
+    function appendBubble(role, content, sources = [], queryId = null) {
       const row = document.createElement('div');
       row.className = `chat-bubble-row ${role}`;
 
@@ -1095,9 +1121,24 @@
           contentBox.appendChild(sourceBox);
         }
 
-        // Copy button
+        // Footer Actions (Feedback + Copiar)
         const footerActions = document.createElement('div');
         footerActions.className = 'bubble-footer-actions';
+
+        if (queryId) {
+          const fbGroup = document.createElement('div');
+          fbGroup.className = 'feedback-btn-group';
+          fbGroup.innerHTML = `
+            <span style="font-size:0.7rem; color:var(--text-muted); margin-right:2px;">¿Te sirvió?</span>
+            <button class="feedback-btn" title="Respuesta útil" onclick="sendRating(this, '${queryId}', 'up')">👍</button>
+            <button class="feedback-btn" title="No resolvió mi duda" onclick="sendRating(this, '${queryId}', 'down')">👎</button>
+          `;
+          footerActions.appendChild(fbGroup);
+        } else {
+          const spacer = document.createElement('div');
+          footerActions.appendChild(spacer);
+        }
+
         const copyBtn = document.createElement('button');
         copyBtn.className = 'copy-action-btn';
         copyBtn.innerHTML = `
@@ -1131,6 +1172,23 @@
       row.appendChild(contentBox);
       chatScroll.appendChild(row);
       chatScroll.scrollTop = chatScroll.scrollHeight;
+    }
+
+    async function sendRating(btn, queryId, rating) {
+      const parent = btn.parentElement;
+      parent.innerHTML = rating === 'up'
+        ? '<span style="font-size:0.72rem; color:#059669; font-weight:700;">✓ ¡Gracias por tu voto!</span>'
+        : '<span style="font-size:0.72rem; color:#dc2626; font-weight:700;">✓ Gracias, revisaremos esto.</span>';
+
+      try {
+        await fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query_id: queryId, rating: rating })
+        });
+      } catch (err) {
+        console.warn('Error enviando feedback:', err);
+      }
     }
 
     function createTypingRow() {
