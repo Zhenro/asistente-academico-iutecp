@@ -38,6 +38,12 @@ class RAGEngine:
         if session_id in self.session_memories:
             del self.session_memories[session_id]
 
+    def reload_documents(self) -> int:
+        """Limpia la memoria caché y recarga todos los documentos PDF activos."""
+        self._cached_chunks = None
+        chunks = self._get_memory_chunks()
+        return len(chunks)
+
     def _get_memory_chunks(self):
         if self._cached_chunks is None:
             self._cached_chunks = []

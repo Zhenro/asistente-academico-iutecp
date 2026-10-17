@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>IUTECP - Panel de Gestión Académica (Secretaría)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0b3954;
+      --primary-dark: #062235;
+      --primary-light: #e0f2fe;
+      --accent: #d97706;
+      --accent-soft: #fef3c7;
+      --success: #059669;
+      --success-soft: #d1fae5;
+      --danger: #dc2626;
+      --danger-soft: #fee2e2;
+      --bg-page: #f8fafc;
+      --bg-surface: #ffffff;
+      --border: #e2e8f0;
+      --border-focus: #2563eb;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-page);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* BARRA SUPERIOR */
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 1.15rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .brand-text h1 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--primary-dark);
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+    .btn-secondary:hover {
+      background: #f1f5f9;
+      border-color: var(--text-muted);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+    }
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background: #ffffff;
+      border-color: #fca5a5;
+      color: var(--danger);
+    }
+    .btn-danger:hover {
+      background: var(--danger-soft);
+      border-color: var(--danger);
+    }
+
+    /* CONTENEDOR PRINCIPAL */
+    main {
+      flex: 1;
+      max-width: 1100px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* TARJETAS DE MÉTRICAS */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .metric-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .metric-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+    }
+
+    .metric-icon.blue { background: var(--primary-light); color: var(--primary); }
+    .metric-icon.amber { background: var(--accent-soft); color: var(--accent); }
+    .metric-icon.green { background: var(--success-soft); color: var(--success); }
+
+    .metric-data h3 {
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.1;
+    }
+
+    .metric-data p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    /* ZONA DE CARGA DE DOCUMENTOS (DRAG & DROP) */
+    .upload-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .card-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .card-title-row h2 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--primary-dark);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dropzone {
+      border: 2px dashed #cbd5e1;
+      border-radius: var(--radius-md);
+      padding: 32px 20px;
+      text-align: center;
+      cursor: pointer;
+      background: #f8fafc;
+      transition: all 0.2s ease;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--primary);
+      background: #f0fdf4;
+      transform: scale(1.005);
+    }
+
+    .dropzone-icon {
+      font-size: 2.2rem;
+      margin-bottom: 8px;
+    }
+
+    .dropzone h4 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .dropzone p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    /* TABLA DE DOCUMENTOS */
+    .docs-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .table-container {
+      overflow-x: auto;
+      margin-top: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.84rem;
+    }
+
+    th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 700;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.76rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    td {
+      padding: 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: #f8fafc;
+    }
+
+    .pdf-name-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+    }
+
+    .pdf-badge {
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 3px 6px;
+      border-radius: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .table-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* MODAL DE LOGIN */
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 34, 53, 0.7);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .login-card {
+      background: #ffffff;
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+      animation: popIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.92); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .login-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    .login-card h2 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: var(--primary-dark);
+      margin-bottom: 6px;
+    }
+
+    .login-card p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      line-height: 1.45;
+    }
+
+    .login-form input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      margin-bottom: 14px;
+      transition: all 0.2s;
+    }
+
+    .login-form input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(11, 57, 84, 0.15);
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: #ffffff;
+      font-size: 0.9rem;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .login-btn:hover {
+      background: var(--primary-dark);
+    }
+
+    /* TOAST ALERTS */
+    .toast-box {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 110;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toast {
+      background: #ffffff;
+      border-left: 4px solid var(--primary);
+      box-shadow: var(--shadow-lg);
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.success { border-left-color: var(--success); }
+    .toast.danger { border-left-color: var(--danger); }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- MODAL DE AUTENTICACIÓN -->
+  <div class="login-overlay" id="loginModal">
+    <div class="login-card">
+      <div class="login-icon">🔐</div>
+      <h2>Acceso Administrativo</h2>
+      <p>Introduce la contraseña autorizada de Secretaría o Control de Estudios del IUTECP:</p>
+      <form class="login-form" onsubmit="handleLogin(event)">
+        <input type="password" id="adminPassInput" placeholder="Contraseña de administrador" autofocus required autocomplete="current-password">
+        <button type="submit" class="login-btn">Entrar al Panel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header>
+    <div class="brand-wrap">
+      <div class="brand-logo">IU</div>
+      <div class="brand-text">
+        <h1>IUTECP · Secretaría Académica</h1>
+        <p>Panel de Gestión de Conocimiento RAG y Reglamentos</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a href="/" class="btn btn-secondary" target="_blank" title="Abrir Asistente">
+        <span>💬 Ver Asistente Web</span>
+      </a>
+      <button class="btn btn-danger" onclick="logout()" title="Cerrar sesión">
+        <span>Salir</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <!-- RESUMEN DE MÉTRICAS -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-icon blue">📚</div>
+        <div class="metric-data">
+          <h3 id="statDocsCount">-</h3>
+          <p>Documentos Normativos</p>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-icon amber">🧩</div>
+        <div class="metric-data">
+          <h3 id="statChunksCount">-</h3>
+          <p>Fragmentos Indexados en RAG</p>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-icon green">⚡</div>
+        <div class="metric-data">
+          <h3>&lt; 35 MB</h3>
+          <p>Memoria RAM en la Nube</p>
+        </div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-icon blue">📱</div>
+        <div class="metric-data">
+          <h3>@IutecpAsistenteBot</h3>
+          <p>Telegram 24/7 Conectado</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBIR NUEVO DOCUMENTO -->
+    <div class="upload-card">
+      <div class="card-title-row">
+        <h2>
+          <span>📤 Cargar Nuevo Documento Oficial</span>
+        </h2>
+        <button class="btn btn-secondary" onclick="triggerReindex()" id="reindexBtn">
+          <span>🔄 Reindexar Todo en Caliente</span>
+        </button>
+      </div>
+
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+        <div class="dropzone-icon">📄</div>
+        <h4>Arrastra aquí un archivo PDF o haz clic para seleccionarlo</h4>
+        <p>Normativas, calendarios de exámenes, circulares o instructivos oficiales (Formato .PDF)</p>
+        <input type="file" id="fileInput" accept=".pdf" onchange="uploadSelectedFile(event)">
+      </div>
+    </div>
+
+    <!-- LISTADO DE DOCUMENTOS ACTIVOS -->
+    <div class="docs-card">
+      <div class="card-title-row">
+        <h2>
+          <span>📋 Inventario de Documentos Activos en el Asistente</span>
+        </h2>
+        <span style="font-size: 0.78rem; color: var(--text-muted); font-weight: 500;">
+          Los cambios se sincronizan en segundos con la Web y con Telegram
+        </span>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre del Documento</th>
+              <th>Tamaño</th>
+              <th>Páginas</th>
+              <th>Última Modificación</th>
+              <th style="text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="documentsTableBody">
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+                Cargando inventario de normativas...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast-box" id="toastBox"></div>
+
+  <script>
+    let adminToken = localStorage.getItem('iutecp_admin_key') || '';
+
+    // Inicialización
+    document.addEventListener('DOMContentLoaded', () => {
+      if (adminToken) {
+        checkAuthAndLoad();
+      } else {
+        document.getElementById('loginModal').style.display = 'flex';
+      }
+
+      setupDragAndDrop();
+    });
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const pass = document.getElementById('adminPassInput').value.trim();
+      if (!pass) return;
+
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pass })
+        });
+
+        if (res.ok) {
+          adminToken = pass;
+          localStorage.setItem('iutecp_admin_key', adminToken);
+          document.getElementById('loginModal').style.display = 'none';
+          showToast('Bienvenido al Panel de Control de Secretaría', 'success');
+          loadDocuments();
+        } else {
+          showToast('Contraseña incorrecta. Intenta nuevamente.', 'danger');
+        }
+      } catch (err) {
+        showToast('Error de conexión con el servidor.', 'danger');
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('iutecp_admin_key');
+      location.reload();
+    }
+
+    async function checkAuthAndLoad() {
+      try {
+        const res = await fetch('/api/admin/documents', {
+          headers: { 'x-admin-key': adminToken }
+        });
+
+        if (res.ok) {
+          document.getElementById('loginModal').style.display = 'none';
+          renderDocuments(await res.json());
+        } else {
+          localStorage.removeItem('iutecp_admin_key');
+          document.getElementById('loginModal').style.display = 'flex';
+        }
+      } catch (err) {
+        showToast('Error al verificar credenciales con el servidor.', 'danger');
+      }
+    }
+
+    async function loadDocuments() {
+      try {
+        const res = await fetch('/api/admin/documents', {
+          headers: { 'x-admin-key': adminToken }
+        });
+        if (res.ok) {
+          renderDocuments(await res.json());
+        }
+      } catch (err) {
+        console.error('Error cargando documentos:', err);
+      }
+    }
+
+    function renderDocuments(data) {
+      document.getElementById('statDocsCount').textContent = data.total_documents;
+      document.getElementById('statChunksCount').textContent = data.total_chunks;
+
+      const tbody = document.getElementById('documentsTableBody');
+      tbody.innerHTML = '';
+
+      if (!data.documents || data.documents.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
+              No hay documentos PDF en la carpeta. Sube uno arriba para comenzar.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      data.documents.forEach(doc => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>
+            <div class="pdf-name-cell">
+              <span class="pdf-badge">PDF</span>
+              <span>${doc.name}</span>
+            </div>
+          </td>
+          <td>${doc.size_kb} KB</td>
+          <td>${doc.pages} pág(s)</td>
+          <td>${doc.modified_at}</td>
+          <td style="text-align: right;">
+            <div class="table-actions" style="justify-content: flex-end;">
+              <button class="btn btn-secondary" onclick="downloadDocument('${doc.name}')" title="Descargar PDF">
+                <span>⬇️ Descargar</span>
+              </button>
+              <button class="btn btn-danger" onclick="deleteDocument('${doc.name}')" title="Eliminar documento">
+                <span>🗑️ Eliminar</span>
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function uploadSelectedFile(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showToast('Solo se permiten archivos en formato PDF.', 'danger');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      showToast(`Subiendo e indexando ${file.name}...`, 'success');
+
+      try {
+        const res = await fetch('/api/admin/upload', {
+          method: 'POST',
+          headers: { 'x-admin-key': adminToken },
+          body: formData
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`✅ ${data.message} (${data.total_chunks} fragmentos activos)`, 'success');
+          loadDocuments();
+        } else {
+          showToast(`Error: ${data.detail || 'No se pudo subir'}`, 'danger');
+        }
+      } catch (err) {
+        showToast('Error de red al subir el documento.', 'danger');
+      } finally {
+        e.target.value = '';
+      }
+    }
+
+    async function deleteDocument(name) {
+      if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente el documento "${name}" de la base de conocimientos?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/admin/documents/${encodeURIComponent(name)}`, {
+          method: 'DELETE',
+          headers: { 'x-admin-key': adminToken }
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`🗑️ Documento eliminado. Base actualizada a ${data.total_chunks} fragmentos.`, 'success');
+          loadDocuments();
+        } else {
+          showToast(`Error: ${data.detail || 'No se pudo eliminar'}`, 'danger');
+        }
+      } catch (err) {
+        showToast('Error de red al intentar eliminar el archivo.', 'danger');
+      }
+    }
+
+    function downloadDocument(name) {
+      // Descarga usando x-admin-key por fetch
+      fetch(`/api/admin/documents/${encodeURIComponent(name)}/download`, {
+        headers: { 'x-admin-key': adminToken }
+      })
+      .then(res => res.blob())
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      })
+      .catch(() => showToast('Error al descargar el archivo.', 'danger'));
+    }
+
+    async function triggerReindex() {
+      const btn = document.getElementById('reindexBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<span>⏳ Reindexando...</span>`;
+
+      try {
+        const res = await fetch('/api/admin/reindex', {
+          method: 'POST',
+          headers: { 'x-admin-key': adminToken }
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`✅ ${data.message}`, 'success');
+          loadDocuments();
+        } else {
+          showToast('Error al reindexar la base de conocimientos.', 'danger');
+        }
+      } catch (err) {
+        showToast('Error al conectar con el servidor.', 'danger');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>🔄 Reindexar Todo en Caliente</span>`;
+      }
+    }
+
+    function setupDragAndDrop() {
+      const dropzone = document.getElementById('dropzone');
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropzone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropzone.classList.remove('dragover');
+        });
+      });
+
+      dropzone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+          document.getElementById('fileInput').files = files;
+          uploadSelectedFile({ target: { files } });
+        }
+      });
+    }
+
+    function showToast(text, type = 'info') {
+      const box = document.getElementById('toastBox');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = text;
+      box.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+  </script>
+</body>
+</html>

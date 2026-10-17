@@ -1,12 +1,14 @@
 import os
 import json
 import urllib.request
+import re
+from datetime import datetime
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 try:
     from src.config import FRONTEND_DIR, DOCUMENTS_DIR
@@ -272,6 +274,134 @@ async def telegram_setup():
         return {"status": "error", "message": str(e)}
 
 
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "iutecp2026").strip()
+
+def verify_admin(x_admin_key: Optional[str]):
+    if not x_admin_key or x_admin_key.strip() != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Clave de administrador incorrecta o no suministrada.")
+    return True
+
+
+@app.get("/admin")
+async def serve_admin():
+    admin_file = FRONTEND_DIR / "admin.html"
+    if not admin_file.exists():
+        raise HTTPException(status_code=404, detail="Panel de administración no encontrado.")
+    return FileResponse(admin_file)
+
+
+class AdminLoginRequest(BaseModel):
+    password: str
+
+
+@app.post("/api/admin/login")
+async def admin_login(req: AdminLoginRequest):
+    if req.password.strip() == ADMIN_PASSWORD:
+        return {"status": "ok", "message": "Autenticación exitosa."}
+    raise HTTPException(status_code=401, detail="Contraseña incorrecta.")
+
+
+@app.get("/api/admin/documents")
+async def admin_list_documents(x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    try:
+        from src.ingestion import extract_text_from_pdf
+    except ImportError:
+        from ingestion import extract_text_from_pdf
+
+    docs = []
+    for pdf in sorted(DOCUMENTS_DIR.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True):
+        mtime = datetime.fromtimestamp(pdf.stat().st_mtime).strftime("%d/%m/%Y %H:%M")
+        size_kb = round(pdf.stat().st_size / 1024, 2)
+        try:
+            pages = len(extract_text_from_pdf(pdf))
+        except Exception:
+            pages = 1
+        docs.append({
+            "name": pdf.name,
+            "size_kb": size_kb,
+            "modified_at": mtime,
+            "pages": pages
+        })
+    total_chunks = len(rag_engine._get_memory_chunks())
+    return {
+        "documents": docs,
+        "total_documents": len(docs),
+        "total_chunks": total_chunks,
+        "bot_username": "IutecpAsistenteBot"
+    }
+
+
+@app.post("/api/admin/upload")
+async def admin_upload_document(file: UploadFile = File(...), x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Solo se permiten documentos en formato PDF.")
+
+    # Sanitizar nombre de archivo
+    clean_name = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', file.filename)
+    if not clean_name.lower().endswith(".pdf"):
+        clean_name += ".pdf"
+
+    target_path = DOCUMENTS_DIR / clean_name
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="El archivo PDF subido está vacío.")
+
+    with open(target_path, "wb") as f:
+        f.write(content)
+
+    # Recargar fragmentos RAG en caliente
+    chunks_count = rag_engine.reload_documents()
+
+    return {
+        "status": "success",
+        "message": f"Documento '{clean_name}' cargado con éxito en la base de conocimientos.",
+        "filename": clean_name,
+        "total_chunks": chunks_count
+    }
+
+
+@app.delete("/api/admin/documents/{filename}")
+async def admin_delete_document(filename: str, x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    
+    target_path = DOCUMENTS_DIR / filename
+    # Prevenir Path Traversal
+    if not target_path.resolve().is_relative_to(DOCUMENTS_DIR.resolve()) or not target_path.exists():
+        raise HTTPException(status_code=404, detail="El documento especificado no existe.")
+
+    target_path.unlink()
+    chunks_count = rag_engine.reload_documents()
+
+    return {
+        "status": "success",
+        "message": f"Documento '{filename}' eliminado del sistema.",
+        "total_chunks": chunks_count
+    }
+
+
+@app.get("/api/admin/documents/{filename}/download")
+async def admin_download_document(filename: str, x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    target_path = DOCUMENTS_DIR / filename
+    if not target_path.resolve().is_relative_to(DOCUMENTS_DIR.resolve()) or not target_path.exists():
+        raise HTTPException(status_code=404, detail="El documento especificado no existe.")
+    return FileResponse(target_path, filename=filename, media_type="application/pdf")
+
+
+@app.post("/api/admin/reindex")
+async def admin_trigger_reindex(x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    chunks_count = rag_engine.reload_documents()
+    return {
+        "status": "success",
+        "message": f"Base de conocimientos reindexada. Total de fragmentos activos: {chunks_count}",
+        "total_chunks": chunks_count
+    }
+
+
 @app.get("/api/documents")
 async def list_documents():
     docs = []
@@ -286,7 +416,7 @@ async def list_documents():
 @app.post("/api/reindex")
 async def trigger_reindex():
     try:
-        count = build_vector_store()
+        count = rag_engine.reload_documents()
         return {"status": "success", "message": f"Se reindexaron {count} fragmentos con éxito."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error durante reindexación: {str(e)}")
