@@ -24,11 +24,13 @@ try:
     from src.rag_engine import rag_engine
     from src.ingestion import build_vector_store
     import src.analytics as analytics
+    import src.ternanet as ternanet
 except ImportError:
     from config import FRONTEND_DIR, DOCUMENTS_DIR
     from rag_engine import rag_engine
     from ingestion import build_vector_store
     import analytics
+    import ternanet
 
 app = FastAPI(
     title="IUTECP - Asistente Virtual Académico",
@@ -75,17 +77,24 @@ async def startup_event():
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: str = None
+    session_id: Optional[str] = None
+    student_cedula: Optional[str] = None
 
 
 class ResetRequest(BaseModel):
     session_id: str
 
 
+class StudentIdentifyRequest(BaseModel):
+    cedula: str
+    session_id: Optional[str] = None
+
+
 class ChatResponse(BaseModel):
     answer: str
     sources: List[str]
     query_id: Optional[str] = None
+    student: Optional[Dict[str, Any]] = None
 
 
 def telegram_api_call(token: str, method: str, payload: dict = None, timeout: int = 20) -> dict:
@@ -152,7 +161,11 @@ async def chat_endpoint(request: ChatRequest):
         raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío")
     
     try:
-        result = rag_engine.generate_response(request.message, session_id=request.session_id)
+        result = rag_engine.generate_response(
+            request.message, 
+            session_id=request.session_id,
+            student_cedula=request.student_cedula
+        )
         query_id = analytics.record_query(
             query=request.message,
             channel="web",
@@ -162,7 +175,8 @@ async def chat_endpoint(request: ChatRequest):
         return ChatResponse(
             answer=result["answer"],
             sources=result["sources"],
-            query_id=query_id
+            query_id=query_id,
+            student=result.get("student")
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar consulta: {str(e)}")
@@ -172,6 +186,43 @@ async def chat_endpoint(request: ChatRequest):
 async def reset_session_endpoint(request: ResetRequest):
     rag_engine.clear_session(request.session_id)
     return {"status": "success", "message": f"Sesión {request.session_id} reiniciada."}
+
+
+@app.post("/api/student/identify")
+async def student_identify_endpoint(request: StudentIdentifyRequest):
+    """Permite al estudiante autenticarse o seleccionarse por cédula para vincular su expediente a la sesión."""
+    clean = ternanet.normalize_cedula(request.cedula)
+    student = ternanet.get_student_by_cedula(clean)
+    if not student:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No se encontró ningún estudiante con cédula {request.cedula} en TernaNet."
+        )
+    
+    if request.session_id:
+        rag_engine.set_session_student(request.session_id, clean)
+        
+    return {
+        "status": "success",
+        "student": student,
+        "message": f"Identificado exitosamente como {student['nombre']} ({student['carrera']})"
+    }
+
+
+@app.get("/api/student/profile/{cedula}")
+async def get_student_profile_endpoint(cedula: str):
+    """Consulta pública o interna del expediente simulado de TernaNet."""
+    clean = ternanet.normalize_cedula(cedula)
+    student = ternanet.get_student_by_cedula(clean)
+    if not student:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado en TernaNet.")
+    return student
+
+
+@app.get("/api/students/list")
+async def get_all_students_endpoint():
+    """Retorna los expedientes de estudiantes para selección rápida en la UI."""
+    return ternanet.load_students()
 
 
 def handle_telegram_message_async(token: str, message: dict):
@@ -226,11 +277,60 @@ def handle_telegram_message_async(token: str, message: dict):
             "• 🏢 Sedes, ubicaciones y teléfonos\n"
             "• 💳 Pagos de matrícula en cuotas con Cashea\n"
             "• 📊 Escala de notas y pérdida por inasistencias (PI)\n"
-            "• 🎓 Servicio comunitario, pasantías y grado\n\n"
+            "• 🎓 Servicio comunitario, pasantías y grado\n"
+            "• 👤 Consultas con tu expediente: Escribe `/estudiante <tu_cedula>`\n\n"
             "¿Qué consulta tienes hoy? Escríbela o envíame un audio."
         )
         send_telegram_message(token, chat_id, welcome_msg)
         return
+
+    if text.startswith(("/estudiante", "/cedula", "/perfil", "/login")):
+        clean_cand = ternanet.detect_cedula_in_text(text)
+        if clean_cand:
+            st = ternanet.get_student_by_cedula(clean_cand)
+            if st:
+                rag_engine.set_session_student(session_id, clean_cand)
+                msg = (
+                    f"🎓 *¡Identificado con éxito en TernaNet!*\n\n"
+                    f"👤 *Estudiante:* {st['nombre']}\n"
+                    f"🆔 *Cédula:* {st['cedula_formato']}\n"
+                    f"📚 *Carrera:* {st['carrera']} ({st['sede']})\n"
+                    f"📊 *Semestre:* {st['semestre']}to | *Avance:* {st['porcentaje_carrera']}%\n"
+                    f"💳 *Estatus Financiero:* {st['estatus_arancelario']}\n\n"
+                    "¡Listo! Ahora todas tus consultas (servicio comunitario, pasantías, pagos, notas) se responderán cruzando la normativa con tu expediente."
+                )
+                send_telegram_message(token, chat_id, msg)
+                return
+            else:
+                send_telegram_message(token, chat_id, f"⚠️ La cédula {clean_cand} no se encuentra registrada en el sistema de prueba de TernaNet.")
+                return
+        else:
+            current_st = rag_engine.get_session_student(session_id)
+            if current_st:
+                sc = current_st.get("servicio_comunitario", {})
+                sc_txt = sc.get("estatus", "N/A") if isinstance(sc, dict) else str(sc)
+                pas = current_st.get("pasantias", {})
+                pas_txt = pas.get("estatus", "N/A") if isinstance(pas, dict) else str(pas)
+                msg = (
+                    f"🎓 *Expediente TernaNet Activo:*\n\n"
+                    f"👤 *Nombre:* {current_st['nombre']}\n"
+                    f"🆔 *Cédula:* {current_st['cedula_formato']}\n"
+                    f"📚 *Carrera:* {current_st['carrera']} ({current_st['sede']})\n"
+                    f"📊 *Semestre:* {current_st['semestre']}to ({current_st['porcentaje_carrera']}% aprobados)\n"
+                    f"📈 *Promedio:* {current_st['promedio']} / 20\n"
+                    f"🤝 *Servicio Comunitario:* {sc_txt}\n"
+                    f"💼 *Pasantías:* {pas_txt}\n\n"
+                    "💡 *Tip:* Para consultar con otra cédula, escribe: `/estudiante <cedula>`"
+                )
+                send_telegram_message(token, chat_id, msg)
+                return
+            else:
+                send_telegram_message(
+                    token, 
+                    chat_id, 
+                    "ℹ️ Para identificarte con tu expediente de TernaNet escribe:\n`/estudiante <tu_cédula>`\n\nEjemplo: `/estudiante 27346776`"
+                )
+                return
 
     if text.startswith("/reset"):
         rag_engine.clear_session(session_id)
@@ -489,6 +589,12 @@ async def admin_reset_analytics(x_admin_key: Optional[str] = Header(None)):
     verify_admin(x_admin_key)
     analytics.reset_analytics()
     return {"status": "success", "message": "Historial de analítica reseteado exitosamente."}
+
+
+@app.get("/api/admin/students")
+async def admin_get_students(x_admin_key: Optional[str] = Header(None)):
+    verify_admin(x_admin_key)
+    return ternanet.load_students()
 
 
 if __name__ == "__main__":

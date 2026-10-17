@@ -337,6 +337,97 @@
       box-shadow: 0 0 6px #10b981;
     }
 
+    .student-profile-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .student-profile-pill:hover {
+      background: #dbeafe;
+      border-color: #93c5fd;
+    }
+    .student-profile-pill.active {
+      background: #f0fdf4;
+      color: #166534;
+      border-color: #86efac;
+    }
+    .student-profile-pill .logout-x {
+      margin-left: 4px;
+      font-weight: 800;
+      opacity: 0.7;
+    }
+    .student-profile-pill .logout-x:hover {
+      opacity: 1;
+      color: #dc2626;
+    }
+
+    /* MODAL TERNANET */
+    .ternanet-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .ternanet-modal-card {
+      background: #ffffff;
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 520px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .ternanet-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f8fafc;
+    }
+    .ternanet-modal-body {
+      padding: 18px 20px;
+      overflow-y: auto;
+      max-height: 75vh;
+    }
+    .student-quick-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #ffffff;
+      margin-bottom: 8px;
+    }
+    .student-quick-card:hover {
+      border-color: var(--primary);
+      background: #eff6ff;
+      transform: translateY(-1px);
+    }
+    .student-quick-card.active {
+      border-color: #10b981;
+      background: #f0fdf4;
+    }
+
     /* CHAT STREAM */
     #chat-scroll {
       flex: 1;
@@ -917,9 +1008,15 @@
           <p>Consultas oficiales sobre admisión, notas, sedes y reglamentos</p>
         </div>
       </div>
-      <div class="online-indicator">
-        <div class="online-dot"></div>
-        <span>IA En Línea</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button id="studentBadgeBtn" class="student-profile-pill" onclick="openTernaModal()" title="Vincular expediente de TernaNet">
+          <span class="icon">🎓</span>
+          <span id="studentBadgeLabel">Soy Estudiante (TernaNet)</span>
+        </button>
+        <div class="online-indicator">
+          <div class="online-dot"></div>
+          <span>IA En Línea</span>
+        </div>
       </div>
     </header>
 
@@ -970,6 +1067,18 @@
             <span class="sub">Escala 1 a 20, cortes y pérdida PI</span>
           </div>
         </div>
+
+        <!-- BANNER DE IDENTIFICACIÓN TERNANET -->
+        <div style="margin-top: 14px; padding: 12px 14px; background: #eff6ff; border: 1.5px dashed #93c5fd; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.5rem;">🎓</span>
+            <div>
+              <div style="font-size: 0.85rem; font-weight: 800; color: #1e3a8a;">¿Eres estudiante del IUTECP? Activa tu Perfil TernaNet</div>
+              <div style="font-size: 0.74rem; color: #3b82f6;">Consulta si puedes inscribir pasantías, servicio comunitario o el estatus de tus pagos.</div>
+            </div>
+          </div>
+          <button class="quick-pill" onclick="openTernaModal()" style="background: #2563eb; color: #ffffff; border: none; font-weight: 700; padding: 7px 16px; cursor: pointer;">Identificarme</button>
+        </div>
       </div>
 
     </div>
@@ -992,6 +1101,44 @@
       </div>
     </div>
   </main>
+
+  <!-- MODAL DE IDENTIFICACIÓN TERNANET -->
+  <div class="ternanet-modal-backdrop" id="ternaModal" style="display: none;" onclick="closeTernaModalOnBackdrop(event)">
+    <div class="ternanet-modal-card">
+      <div class="ternanet-modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="brand-badge" style="width: 36px; height: 36px; font-size: 0.95rem; border-radius: 8px;">TN</div>
+          <div>
+            <h3 style="font-size: 0.98rem; font-weight: 800; color: var(--primary-dark);">Identificación Estudiantil TernaNet</h3>
+            <p style="font-size: 0.74rem; color: var(--text-muted);">Vincula tu expediente académico para asesoría personalizada</p>
+          </div>
+        </div>
+        <button class="close-drawer-btn" style="display: block;" onclick="closeTernaModal()">&times;</button>
+      </div>
+
+      <div class="ternanet-modal-body">
+        <form onsubmit="handleTernaLogin(event)" style="display: flex; gap: 8px; margin-bottom: 16px;">
+          <input 
+            type="text" 
+            id="ternaCedulaInput" 
+            placeholder="Introduce tu Cédula (ej. 27.346.776)" 
+            style="flex: 1; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 0.88rem; outline: none; font-family: inherit;" 
+            required
+          >
+          <button type="submit" class="quick-pill" style="background: var(--primary); color: #fff; border: none; padding: 0 16px; font-weight: 700; cursor: pointer;">
+            Consultar
+          </button>
+        </form>
+
+        <div style="font-size: 0.72rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px;">
+          O selecciona uno de los perfiles de prueba:
+        </div>
+        <div id="ternaStudentsContainer">
+          <!-- Renderizado dinámico de los 5 estudiantes -->
+        </div>
+      </div>
+    </div>
+  </div>
 
   <script>
     const chatScroll = document.getElementById('chat-scroll');
@@ -1021,6 +1168,134 @@
     let currentSessionId = localStorage.getItem('iutecp_session_id') || ('sess_' + Math.random().toString(36).substring(2, 11));
     localStorage.setItem('iutecp_session_id', currentSessionId);
 
+    let currentStudent = null;
+    try {
+      currentStudent = JSON.parse(localStorage.getItem('iutecp_active_student') || 'null');
+    } catch (e) {
+      currentStudent = null;
+    }
+
+    function updateStudentUI() {
+      const btn = document.getElementById('studentBadgeBtn');
+      const label = document.getElementById('studentBadgeLabel');
+      if (!btn || !label) return;
+      if (currentStudent) {
+        btn.classList.add('active');
+        const shortName = currentStudent.nombre.split(' ')[0] + ' ' + (currentStudent.nombre.split(' ')[1] || '');
+        const cleanCarrera = currentStudent.carrera.replace('TSU en ', '').replace('TSU ', '');
+        label.innerHTML = `👤 ${shortName} (${cleanCarrera}) <span class="logout-x" onclick="logoutStudent(event)" title="Cerrar expediente de estudiante">&times;</span>`;
+      } else {
+        btn.classList.remove('active');
+        label.innerHTML = 'Soy Estudiante (TernaNet)';
+      }
+    }
+
+    function openTernaModal() {
+      const modal = document.getElementById('ternaModal');
+      if (modal) {
+        modal.style.display = 'flex';
+        loadStudentCards();
+        setTimeout(() => {
+          const inp = document.getElementById('ternaCedulaInput');
+          if (inp) inp.focus();
+        }, 100);
+      }
+    }
+
+    function closeTernaModal() {
+      const modal = document.getElementById('ternaModal');
+      if (modal) modal.style.display = 'none';
+    }
+
+    function closeTernaModalOnBackdrop(e) {
+      if (e.target.id === 'ternaModal') {
+        closeTernaModal();
+      }
+    }
+
+    async function loadStudentCards() {
+      const container = document.getElementById('ternaStudentsContainer');
+      if (!container) return;
+      container.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); text-align:center; padding:12px;">Cargando estudiantes...</div>';
+      try {
+        const res = await fetch('/api/students/list');
+        const students = await res.json();
+        container.innerHTML = '';
+        students.forEach(st => {
+          const isCurrent = currentStudent && currentStudent.cedula === st.cedula;
+          const card = document.createElement('div');
+          card.className = `student-quick-card ${isCurrent ? 'active' : ''}`;
+          card.onclick = () => selectStudent(st);
+          card.innerHTML = `
+            <div>
+              <div style="font-weight:700; font-size:0.86rem; color:var(--primary-dark);">${st.nombre}</div>
+              <div style="font-size:0.75rem; color:var(--text-muted);">${st.carrera} · ${st.semestre}to Sem. (${st.sede})</div>
+              <div style="font-size:0.72rem; color:#059669; font-weight:700; margin-top:2px;">C.I. ${st.cedula_formato} · ${st.porcentaje_carrera}% créditos</div>
+            </div>
+            <button class="quick-pill" style="font-size:0.72rem; padding:4px 10px; background:${isCurrent ? '#059669' : 'var(--primary)'}; color:#fff; border:none;">
+              ${isCurrent ? 'Activo ✓' : 'Seleccionar'}
+            </button>
+          `;
+          container.appendChild(card);
+        });
+      } catch (err) {
+        container.innerHTML = '<div style="color:#dc2626; font-size:0.8rem;">No se pudieron cargar los estudiantes.</div>';
+      }
+    }
+
+    async function handleTernaLogin(e) {
+      e.preventDefault();
+      const input = document.getElementById('ternaCedulaInput');
+      const val = input.value.trim();
+      if (!val) return;
+      try {
+        const res = await fetch('/api/student/identify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cedula: val, session_id: currentSessionId })
+        });
+        const data = await res.json();
+        if (res.ok && data.student) {
+          setStudentActive(data.student);
+          closeTernaModal();
+          input.value = '';
+          appendBubble('bot', `🎓 ¡Hola **${data.student.nombre}**! He vinculado tu expediente de **TernaNet** (${data.student.carrera}, sede ${data.student.sede}, ${data.student.semestre}to semestre, ${data.student.porcentaje_carrera}% de avance crediticio).\n\nAhora tus preguntas sobre **Servicio Comunitario**, **Pasantías**, **cuotas de Cashea** o **materias** se responderán analizando directamente tu expediente real.`);
+        } else {
+          alert(data.detail || 'No se encontró ningún estudiante con esa cédula.');
+        }
+      } catch (err) {
+        alert('Error al conectar con TernaNet.');
+      }
+    }
+
+    function selectStudent(st) {
+      setStudentActive(st);
+      closeTernaModal();
+      appendBubble('bot', `🎓 ¡Hola **${st.nombre}**! He vinculado tu expediente de **TernaNet** (${st.carrera}, sede ${st.sede}, ${st.semestre}to semestre, ${st.porcentaje_carrera}% de créditos aprobados).\n\nPuedes hacerme preguntas directas como:\n• *¿Cumplo los requisitos para inscribir mi servicio comunitario?*\n• *¿Puedo hacer pasantías este período?*\n• *¿Cuál es el estatus de mis cuotas con Cashea?*\n• *¿Qué materias curso y cuál es mi promedio?*`);
+    }
+
+    function setStudentActive(st) {
+      currentStudent = st;
+      localStorage.setItem('iutecp_active_student', JSON.stringify(st));
+      updateStudentUI();
+      fetch('/api/student/identify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cedula: st.cedula, session_id: currentSessionId })
+      }).catch(console.warn);
+    }
+
+    function logoutStudent(e) {
+      if (e) e.stopPropagation();
+      currentStudent = null;
+      localStorage.removeItem('iutecp_active_student');
+      updateStudentUI();
+      appendBubble('bot', 'ℹ️ Has cerrado sesión de tu expediente estudiantil. Las siguientes consultas se responderán con las normativas generales.');
+    }
+
+    // Inicializar UI de estudiante al cargar la página
+    updateStudentUI();
+
     function selectTopic(text) {
       closeDrawer();
       chatQuery.value = text;
@@ -1046,6 +1321,14 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ session_id: oldSessionId })
         });
+        if (currentStudent) {
+          // Re-vincular estudiante a la nueva sesión
+          fetch('/api/student/identify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cedula: currentStudent.cedula, session_id: currentSessionId })
+          }).catch(console.warn);
+        }
       } catch (err) {
         console.warn('No se pudo resetear la sesión en el servidor:', err);
       }
@@ -1065,13 +1348,22 @@
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text, session_id: currentSessionId })
+          body: JSON.stringify({ 
+            message: text, 
+            session_id: currentSessionId,
+            student_cedula: currentStudent ? currentStudent.cedula : null
+          })
         });
 
         const data = await response.json();
         loadingRow.remove();
 
         if (response.ok) {
+          if (data.student && (!currentStudent || currentStudent.cedula !== data.student.cedula)) {
+            currentStudent = data.student;
+            localStorage.setItem('iutecp_active_student', JSON.stringify(data.student));
+            updateStudentUI();
+          }
           appendBubble('bot', data.answer, data.sources, data.query_id);
         } else {
           appendBubble('bot', '⚠️ Disculpa, ocurrió un error momentáneo al consultar la base de datos. Por favor intenta de nuevo.');

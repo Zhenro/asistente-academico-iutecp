@@ -1,15 +1,23 @@
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 try:
     from src.config import (
         TOP_K_RESULTS, GEMINI_API_KEY, 
         GEMINI_MODEL, OPENAI_API_KEY, OPENAI_MODEL
     )
+    from src.ternanet import (
+        get_student_by_cedula, detect_cedula_in_text,
+        format_student_context_for_rag, normalize_cedula
+    )
 except ImportError:
     from config import (
         TOP_K_RESULTS, GEMINI_API_KEY, 
         GEMINI_MODEL, OPENAI_API_KEY, OPENAI_MODEL
+    )
+    from ternanet import (
+        get_student_by_cedula, detect_cedula_in_text,
+        format_student_context_for_rag, normalize_cedula
     )
 
 # Try importing modern Google GenAI Client
@@ -33,10 +41,25 @@ class RAGEngine:
     def __init__(self):
         self._cached_chunks = None
         self.session_memories: Dict[str, List[Dict[str, str]]] = {}
+        self.session_students: Dict[str, str] = {}  # session_id -> cedula
+
+    def set_session_student(self, session_id: str, cedula: str):
+        """Asocia una cédula de estudiante de TernaNet a una sesión."""
+        if session_id and cedula:
+            clean = normalize_cedula(cedula)
+            self.session_students[session_id] = clean
+
+    def get_session_student(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Obtiene los datos de TernaNet del estudiante vinculado a la sesión."""
+        if not session_id or session_id not in self.session_students:
+            return None
+        return get_student_by_cedula(self.session_students[session_id])
 
     def clear_session(self, session_id: str):
         if session_id in self.session_memories:
             del self.session_memories[session_id]
+        if session_id in self.session_students:
+            del self.session_students[session_id]
 
     def reload_documents(self) -> int:
         """Limpia la memoria caché y recarga todos los documentos PDF activos."""
@@ -96,7 +119,22 @@ class RAGEngine:
             for c in top
         ]
 
-    def generate_response(self, query: str, session_id: str = None) -> Dict[str, Any]:
+    def generate_response(self, query: str, session_id: str = None, student_cedula: str = None) -> Dict[str, Any]:
+        # Detección / Vinculación de Estudiante TernaNet
+        active_student = None
+        if student_cedula:
+            self.set_session_student(session_id, student_cedula)
+        elif session_id:
+            # Chequear si en la pregunta se menciona una cédula (ej. 'mi cedula es 27346776')
+            detected = detect_cedula_in_text(query)
+            if detected:
+                self.set_session_student(session_id, detected)
+
+        if session_id:
+            active_student = self.get_session_student(session_id)
+        elif student_cedula:
+            active_student = get_student_by_cedula(student_cedula)
+
         # Obtener historial de la sesión si existe
         history = self.session_memories.get(session_id, []) if session_id else []
 
@@ -104,9 +142,13 @@ class RAGEngine:
         contexts = self.retrieve(query, history=history)
         
         if not contexts:
+            msg = "No encontré información relevante en los reglamentos y guías oficiales del IUTECP para tu consulta. Te sugiero dirigirte a la Coordinación de Control de Estudios en la sede correspondiente."
+            if active_student:
+                msg = f"Hola, {active_student.get('nombre')}. {msg}"
             return {
-                "answer": "No encontré información relevante en los reglamentos y guías oficiales del IUTECP para tu consulta. Te sugiero dirigirte a la Coordinación de Control de Estudios en la sede correspondiente.",
-                "sources": []
+                "answer": msg,
+                "sources": [],
+                "student": active_student
             }
 
         # Build context string & list sources
@@ -138,7 +180,25 @@ class RAGEngine:
             "6. Responde siempre en español formal pero cercano."
         )
 
-        user_prompt = f"{history_text}CONTEXTO OFICIAL DEL IUTECP:\n{context_text}\n\nNUEVA PREGUNTA DEL ESTUDIANTE: {query}"
+        student_prompt_inject = ""
+        if active_student:
+            student_context = format_student_context_for_rag(active_student)
+            student_prompt_inject = f"{student_context}\n\n"
+            system_instruction += (
+                "\n\n=======================================================\n"
+                "ATENCIÓN - PERFIL DEL ESTUDIANTE IDENTIFICADO EN TERNANET:\n"
+                f"{student_context}\n"
+                "DIRECTRICES OBLIGATORIAS PARA ESTE ESTUDIANTE:\n"
+                f"1. Dirígete cordialmente al estudiante por su nombre ('{active_student.get('nombre')}').\n"
+                "2. Cruza los requisitos y normativas del IUTECP (créditos exigidos, materias cursadas, semestres, prelaciones, servicio comunitario, pasantías, cuotas de Cashea y solvencias) DIRECTAMENTE con los datos reales de su expediente.\n"
+                "   - Ejemplo Servicio Comunitario: En el IUTECP se exige tener aprobado al menos el 50% de los créditos de la carrera. Verifica su porcentaje aprobado en el expediente e indícale con precisión si ya puede inscribirlo o cuántos créditos le faltan.\n"
+                "   - Ejemplo Pasantías: Revisa si cumple con el avance de semestres/créditos y su estatus de pasantías.\n"
+                "   - Ejemplo Pagos/Cashea: Si consulta sobre pagos o matrícula, dile con precisión sus cuotas pagadas/pendientes y fechas.\n"
+                "3. Ofrece una orientación personalizada, motivadora y clara.\n"
+                "=======================================================\n"
+            )
+
+        user_prompt = f"{history_text}{student_prompt_inject}CONTEXTO OFICIAL DEL IUTECP:\n{context_text}\n\nNUEVA PREGUNTA DEL ESTUDIANTE: {query}"
 
         # 2. Strategy A: Use Google Gemini if key available
         current_api_key = os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
@@ -172,7 +232,8 @@ class RAGEngine:
                                 self.session_memories[session_id] = self.session_memories[session_id][-6:]
                             return {
                                 "answer": answer,
-                                "sources": unique_sources
+                                "sources": unique_sources,
+                                "student": active_student
                             }
                     except Exception as e:
                         print(f"[!] Error con {candidate_model}: {e}. Probando siguiente modelo...")
@@ -191,20 +252,22 @@ class RAGEngine:
                 )
                 return {
                     "answer": completion.choices[0].message.content,
-                    "sources": unique_sources
+                    "sources": unique_sources,
+                    "student": active_student
                 }
             except Exception as e:
                 print(f"[!] Error al invocar OpenAI API: {e}")
 
         # 4. Strategy C: High-Fidelity Local Synthesis (Fallback sin API key)
         # Permite probar y validar el RAG localmente sin costo de token
-        answer = self._synthesize_local(query, contexts)
+        answer = self._synthesize_local(query, contexts, student=active_student)
         return {
             "answer": answer,
-            "sources": unique_sources
+            "sources": unique_sources,
+            "student": active_student
         }
 
-    def _synthesize_local(self, query: str, contexts: List[Dict[str, Any]]) -> str:
+    def _synthesize_local(self, query: str, contexts: List[Dict[str, Any]], student: Optional[Dict[str, Any]] = None) -> str:
         """Sintesis local inteligente cuando no se ha configurado una API Key de LLM."""
         import re
         
@@ -222,6 +285,8 @@ class RAGEngine:
         
         best_doc = contexts[0]
         intro = f"De acuerdo con la documentación oficial del **IUTECP** (en *{best_doc['source']}*):\n\n"
+        if student:
+            intro = f"¡Hola, **{student.get('nombre')}**! 🎓 Revisando tu expediente en **TernaNet** ({student.get('carrera')}, {student.get('semestre')}do/to semestre) y la documentación oficial del **IUTECP**:\n\n"
         
         # Recolectar oraciones de todos los contextos
         all_sentences = []

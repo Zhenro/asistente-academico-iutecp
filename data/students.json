@@ -1,0 +1,189 @@
+[
+  {
+    "cedula": "27346776",
+    "cedula_formato": "V-27.346.776",
+    "nombre": "José Andrés Fermín",
+    "carrera": "TSU en Informática",
+    "sede": "Guatire",
+    "semestre": 5,
+    "turno": "Diurno",
+    "creditos_aprobados": 84,
+    "creditos_totales": 105,
+    "porcentaje_carrera": 80.0,
+    "promedio": 17.40,
+    "materias_actuales": [
+      { "codigo": "INF-501", "nombre": "Ingeniería del Software", "nota_acumulada": 18 },
+      { "codigo": "INF-502", "nombre": "Redes de Computadoras Avanzadas", "nota_acumulada": 17 },
+      { "codigo": "INF-503", "nombre": "Taller de Base de Datos y SQL", "nota_acumulada": 19 }
+    ],
+    "servicio_comunitario": {
+      "estatus": "Aprobado",
+      "horas_certificadas": 120,
+      "proyecto": "Automatización del Inventario Comunitario Castillito Guatire"
+    },
+    "pasantias": {
+      "estatus": "En curso",
+      "empresa": "TechSoluciones C.A.",
+      "tutor_empresarial": "Ing. Roberto Salazar"
+    },
+    "estatus_arancelario": "Solvente (Matrícula y cuotas Cashea al día)",
+    "cashea": {
+      "plan": "3 cuotas sin interés",
+      "cuotas_pagadas": 2,
+      "cuotas_totales": 3,
+      "proximo_vencimiento": "28/11/2026"
+    },
+    "solvencias": {
+      "biblioteca": true,
+      "caja": true,
+      "control_estudios": true
+    }
+  },
+  {
+    "cedula": "28416131",
+    "cedula_formato": "V-28.416.131",
+    "nombre": "Diego Torres",
+    "carrera": "TSU en Informática",
+    "sede": "Guatire",
+    "semestre": 4,
+    "turno": "Diurno",
+    "creditos_aprobados": 62,
+    "creditos_totales": 105,
+    "porcentaje_carrera": 59.0,
+    "promedio": 16.25,
+    "materias_actuales": [
+      { "codigo": "INF-401", "nombre": "Programación III (POO)", "nota_acumulada": 16 },
+      { "codigo": "INF-402", "nombre": "Estructuras de Datos", "nota_acumulada": 17 },
+      { "codigo": "INF-403", "nombre": "Sistemas Operativos y Linux", "nota_acumulada": 15 }
+    ],
+    "servicio_comunitario": {
+      "estatus": "Habilitado para inscribir",
+      "horas_certificadas": 0,
+      "observacion": "Cumple con el 50% de créditos de la carrera (59% aprobado)."
+    },
+    "pasantias": {
+      "estatus": "Pendiente",
+      "observacion": "Se cursa al aprobar el 5to semestre."
+    },
+    "estatus_arancelario": "Solvente (Cuota Cashea 2/3 al día)",
+    "cashea": {
+      "plan": "3 cuotas sin interés",
+      "cuotas_pagadas": 2,
+      "cuotas_totales": 3,
+      "proximo_vencimiento": "30/11/2026"
+    },
+    "solvencias": {
+      "biblioteca": true,
+      "caja": true,
+      "control_estudios": true
+    }
+  },
+  {
+    "cedula": "30566388",
+    "cedula_formato": "V-30.566.388",
+    "nombre": "Maryander Torres",
+    "carrera": "TSU en Administración de Empresas",
+    "sede": "Caracas",
+    "semestre": 3,
+    "turno": "Sabatino",
+    "creditos_aprobados": 38,
+    "creditos_totales": 98,
+    "porcentaje_carrera": 38.8,
+    "promedio": 18.10,
+    "distincion": "Cuadro de Honor de la Sede Caracas",
+    "materias_actuales": [
+      { "codigo": "ADM-301", "nombre": "Contabilidad de Costos", "nota_acumulada": 19 },
+      { "codigo": "ADM-302", "nombre": "Administración de Personal", "nota_acumulada": 18 },
+      { "codigo": "ADM-303", "nombre": "Presupuesto Empresarial", "nota_acumulada": 17 }
+    ],
+    "servicio_comunitario": {
+      "estatus": "No habilitado",
+      "horas_certificadas": 0,
+      "observacion": "Requiere 49 créditos (50%). Lleva 38 créditos (faltan 11 para habilitarse)."
+    },
+    "pasantias": {
+      "estatus": "Pendiente",
+      "observacion": "Se cursa en 6to semestre."
+    },
+    "estatus_arancelario": "Solvente (Pago único semestral)",
+    "cashea": null,
+    "solvencias": {
+      "biblioteca": true,
+      "caja": true,
+      "control_estudios": true
+    }
+  },
+  {
+    "cedula": "30155465",
+    "cedula_formato": "V-30.155.465",
+    "nombre": "Ismael Pernía",
+    "carrera": "TSU en Informática",
+    "sede": "Guatire",
+    "semestre": 2,
+    "turno": "Diurno",
+    "creditos_aprobados": 22,
+    "creditos_totales": 105,
+    "porcentaje_carrera": 21.0,
+    "promedio": 15.50,
+    "materias_actuales": [
+      { "codigo": "INF-201", "nombre": "Algoritmos y Programación II", "nota_acumulada": 15 },
+      { "codigo": "INF-202", "nombre": "Lógica Matemática", "nota_acumulada": 16 },
+      { "codigo": "INF-203", "nombre": "Arquitectura del Computador", "nota_acumulada": 14 }
+    ],
+    "servicio_comunitario": {
+      "estatus": "No habilitado",
+      "horas_certificadas": 0,
+      "observacion": "Requiere alcanzar al menos el 50% de la carga crediticia."
+    },
+    "pasantias": {
+      "estatus": "Pendiente",
+      "observacion": "Pendiente para semestres superiores."
+    },
+    "estatus_arancelario": "Pendiente por cancelar Cuota 2 de Cashea",
+    "cashea": {
+      "plan": "3 cuotas",
+      "cuotas_pagadas": 1,
+      "cuotas_totales": 3,
+      "proximo_vencimiento": "25/10/2026 (En período de gracia)"
+    },
+    "solvencias": {
+      "biblioteca": true,
+      "caja": false,
+      "control_estudios": true
+    }
+  },
+  {
+    "cedula": "17498904",
+    "cedula_formato": "V-17.498.904",
+    "nombre": "Anibal Figuera",
+    "carrera": "TSU en Contaduría y Finanzas",
+    "sede": "Caracas",
+    "semestre": 6,
+    "turno": "Sabatino",
+    "creditos_aprobados": 100,
+    "creditos_totales": 100,
+    "porcentaje_carrera": 100.0,
+    "promedio": 16.90,
+    "estatus_academico": "Graduando (Culminó plan de estudios)",
+    "materias_actuales": [],
+    "servicio_comunitario": {
+      "estatus": "Aprobado",
+      "horas_certificadas": 120,
+      "observacion": "Constancia de cumplimiento emitida por Coordinación."
+    },
+    "pasantias": {
+      "estatus": "Aprobadas",
+      "calificacion": 20,
+      "mencion": "Sobresaliente",
+      "empresa": "Consultores Financieros F&A"
+    },
+    "estatus_arancelario": "Solvente de Aranceles de Grado",
+    "cashea": null,
+    "solvencias": {
+      "biblioteca": true,
+      "caja": true,
+      "control_estudios": true,
+      "general_grado": true
+    }
+  }
+]

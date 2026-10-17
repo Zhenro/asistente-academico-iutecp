@@ -592,6 +592,9 @@
     <button class="nav-tab-btn" id="tabBtnAnalytics" onclick="switchTab('analytics')">
       <span>📊 Analítica y Vacíos Normativos</span>
     </button>
+    <button class="nav-tab-btn" id="tabBtnStudents" onclick="switchTab('students')">
+      <span>🎓 Estudiantes TernaNet</span>
+    </button>
   </div>
 
   <main>
@@ -808,6 +811,47 @@
         </div>
       </div>
     </div>
+
+    <!-- ==========================================
+         PESTAÑA 3: ESTUDIANTES TERNANET
+         ========================================== -->
+    <div class="tab-content hidden" id="tabStudents">
+      <div class="panel-card">
+        <div class="panel-header">
+          <div class="panel-titles">
+            <h2>Expedientes Estudiantiles Activos (TernaNet)</h2>
+            <p>Perfiles académicos simulados para atención personalizada con RAG</p>
+          </div>
+          <button class="btn btn-secondary" onclick="loadStudentsAdmin()">
+            <span>🔄 Refrescar Expedientes</span>
+          </button>
+        </div>
+
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Estudiante</th>
+                <th>Cédula</th>
+                <th>Carrera y Sede</th>
+                <th>Semestre / Avance</th>
+                <th>Promedio</th>
+                <th>Servicio Comunitario</th>
+                <th>Pasantías</th>
+                <th>Arancel / Cashea</th>
+              </tr>
+            </thead>
+            <tbody id="studentsTableBody">
+              <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                  Cargando expedientes...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </main>
 
   <div class="toast-box" id="toastBox"></div>
@@ -831,21 +875,78 @@
       currentTab = tab;
       const tabDocs = document.getElementById('tabDocs');
       const tabAnalytics = document.getElementById('tabAnalytics');
+      const tabStudents = document.getElementById('tabStudents');
       const btnDocs = document.getElementById('tabBtnDocs');
       const btnAnalytics = document.getElementById('tabBtnAnalytics');
+      const btnStudents = document.getElementById('tabBtnStudents');
 
-      if (tab === 'docs') {
-        tabDocs.classList.remove('hidden');
-        tabAnalytics.classList.add('hidden');
-        btnDocs.classList.add('active');
-        btnAnalytics.classList.remove('active');
-        loadDocuments();
-      } else {
-        tabDocs.classList.add('hidden');
-        tabAnalytics.classList.remove('hidden');
-        btnDocs.classList.remove('active');
-        btnAnalytics.classList.add('active');
-        loadAnalytics();
+      tabDocs.classList.toggle('hidden', tab !== 'docs');
+      tabAnalytics.classList.toggle('hidden', tab !== 'analytics');
+      tabStudents.classList.toggle('hidden', tab !== 'students');
+
+      btnDocs.classList.toggle('active', tab === 'docs');
+      btnAnalytics.classList.toggle('active', tab === 'analytics');
+      btnStudents.classList.toggle('active', tab === 'students');
+
+      if (tab === 'docs') loadDocuments();
+      else if (tab === 'analytics') loadAnalytics();
+      else if (tab === 'students') loadStudentsAdmin();
+    }
+
+    async function loadStudentsAdmin() {
+      const tbody = document.getElementById('studentsTableBody');
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:var(--text-muted);">Cargando expedientes...</td></tr>';
+      try {
+        const res = await fetch('/api/admin/students', {
+          headers: { 'x-admin-key': adminToken }
+        });
+        if (!res.ok) throw new Error('Error al consultar lista de estudiantes');
+        const students = await res.json();
+        tbody.innerHTML = '';
+        students.forEach(st => {
+          const tr = document.createElement('tr');
+          const sc = st.servicio_comunitario || {};
+          const scTxt = typeof sc === 'object' ? `${sc.estatus} (${sc.proyecto || sc.observacion || ''})` : sc;
+          const pas = st.pasantias || {};
+          const pasTxt = typeof pas === 'object' ? `${pas.estatus} (${pas.empresa || pas.observacion || ''})` : pas;
+          
+          let arancelBadge = `<span class="badge ${st.estatus_arancelario === 'Solvente' ? 'badge-success' : 'badge-warning'}">${st.estatus_arancelario}</span>`;
+          if (st.cashea) {
+            arancelBadge += `<div style="font-size:0.72rem; color:var(--text-muted); margin-top:3px;">Cashea: ${st.cashea.cuotas_pagadas}/${st.cashea.cuotas_totales} cuotas</div>`;
+          }
+
+          tr.innerHTML = `
+            <td>
+              <strong style="color:var(--primary-dark); font-size:0.88rem;">${st.nombre}</strong>
+            </td>
+            <td>
+              <code style="font-size:0.8rem;">${st.cedula_formato}</code>
+            </td>
+            <td>
+              <div style="font-weight:600; font-size:0.82rem;">${st.carrera}</div>
+              <small style="color:var(--text-muted);">${st.sede} · Turno ${st.turno}</small>
+            </td>
+            <td>
+              <strong>${st.semestre}to Semestre</strong>
+              <div style="font-size:0.72rem; color:#059669; font-weight:700;">${st.creditos_aprobados}/${st.creditos_totales} UC (${st.porcentaje_carrera}%)</div>
+            </td>
+            <td>
+              <span class="badge badge-success" style="font-size:0.8rem;">${st.promedio} pts</span>
+            </td>
+            <td style="font-size:0.75rem;">
+              ${scTxt}
+            </td>
+            <td style="font-size:0.75rem;">
+              ${pasTxt}
+            </td>
+            <td>
+              ${arancelBadge}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#dc2626;">Error cargando estudiantes: ${err.message}</td></tr>`;
       }
     }
 
