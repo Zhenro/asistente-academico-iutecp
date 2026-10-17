@@ -1,5 +1,9 @@
 import os
-from typing import List, Dict, Any, Optional
+import re
+import time
+import json
+import asyncio
+from typing import List, Dict, Any, Optional, AsyncGenerator
 
 try:
     from src.config import (
@@ -42,6 +46,32 @@ class RAGEngine:
         self._cached_chunks = None
         self.session_memories: Dict[str, List[Dict[str, str]]] = {}
         self.session_students: Dict[str, str] = {}  # session_id -> cedula
+        self._query_cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_ttl_seconds = 3600  # 1 hora de validez
+        self._max_cache_entries = 250
+
+    def _make_cache_key(self, query: str, student: Optional[Dict[str, Any]]) -> str:
+        clean = re.sub(r'[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ]', '', query.lower().strip())
+        ced = student.get("cedula", "anon") if student else "anon"
+        return f"{clean}::{ced}"
+
+    def _get_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        if cache_key in self._query_cache:
+            entry = self._query_cache[cache_key]
+            if time.time() - entry["timestamp"] < self._cache_ttl_seconds:
+                return entry["data"]
+            else:
+                del self._query_cache[cache_key]
+        return None
+
+    def _save_to_cache(self, cache_key: str, data: Dict[str, Any]):
+        if len(self._query_cache) >= self._max_cache_entries:
+            oldest_key = next(iter(self._query_cache))
+            del self._query_cache[oldest_key]
+        self._query_cache[cache_key] = {
+            "timestamp": time.time(),
+            "data": data
+        }
 
     def set_session_student(self, session_id: str, cedula: str):
         """Asocia una cédula de estudiante de TernaNet a una sesión."""
@@ -64,6 +94,7 @@ class RAGEngine:
     def reload_documents(self) -> int:
         """Limpia la memoria caché y recarga todos los documentos PDF activos."""
         self._cached_chunks = None
+        self._query_cache.clear()
         chunks = self._get_memory_chunks()
         return len(chunks)
 
@@ -137,6 +168,22 @@ class RAGEngine:
 
         # Obtener historial de la sesión si existe
         history = self.session_memories.get(session_id, []) if session_id else []
+
+        # ⚡ Optimización 1: In-Memory Cache Lookup (Respuesta instantánea < 10ms para consultas repetidas)
+        cache_key = self._make_cache_key(query, active_student)
+        cached_result = self._get_from_cache(cache_key)
+        if cached_result and not history:
+            if session_id:
+                if session_id not in self.session_memories:
+                    self.session_memories[session_id] = []
+                self.session_memories[session_id].append({"role": "user", "content": query})
+                self.session_memories[session_id].append({"role": "assistant", "content": cached_result["answer"]})
+                self.session_memories[session_id] = self.session_memories[session_id][-6:]
+            return {
+                **cached_result,
+                "student": active_student,
+                "cached": True
+            }
 
         # 1. Retrieve relevant contexts (considerando contexto de historial)
         contexts = self.retrieve(query, history=history)
@@ -230,6 +277,12 @@ class RAGEngine:
                                 self.session_memories[session_id].append({"role": "user", "content": query})
                                 self.session_memories[session_id].append({"role": "assistant", "content": answer})
                                 self.session_memories[session_id] = self.session_memories[session_id][-6:]
+                            
+                            # ⚡ Guardar en Caché Inteligente
+                            self._save_to_cache(cache_key, {
+                                "answer": answer,
+                                "sources": unique_sources
+                            })
                             return {
                                 "answer": answer,
                                 "sources": unique_sources,
@@ -250,8 +303,10 @@ class RAGEngine:
                     ],
                     temperature=0.3
                 )
+                answer = completion.choices[0].message.content
+                self._save_to_cache(cache_key, {"answer": answer, "sources": unique_sources})
                 return {
-                    "answer": completion.choices[0].message.content,
+                    "answer": answer,
                     "sources": unique_sources,
                     "student": active_student
                 }
@@ -259,13 +314,154 @@ class RAGEngine:
                 print(f"[!] Error al invocar OpenAI API: {e}")
 
         # 4. Strategy C: High-Fidelity Local Synthesis (Fallback sin API key)
-        # Permite probar y validar el RAG localmente sin costo de token
         answer = self._synthesize_local(query, contexts, student=active_student)
+        self._save_to_cache(cache_key, {"answer": answer, "sources": unique_sources})
         return {
             "answer": answer,
             "sources": unique_sources,
             "student": active_student
         }
+
+    async def generate_response_stream(
+        self, query: str, session_id: str = None, student_cedula: str = None
+    ) -> AsyncGenerator[str, None]:
+        """Transmite la respuesta token por token en tiempo real (Server-Sent Events)."""
+        active_student = None
+        if student_cedula:
+            self.set_session_student(session_id, student_cedula)
+        elif session_id:
+            detected = detect_cedula_in_text(query)
+            if detected:
+                self.set_session_student(session_id, detected)
+
+        if session_id:
+            active_student = self.get_session_student(session_id)
+        elif student_cedula:
+            active_student = get_student_by_cedula(student_cedula)
+
+        # Enviar evento inicial de metadatos
+        yield f"data: {json.dumps({'type': 'start', 'student': active_student})}\n\n"
+
+        history = self.session_memories.get(session_id, []) if session_id else []
+        cache_key = self._make_cache_key(query, active_student)
+        cached_result = self._get_from_cache(cache_key)
+
+        # ⚡ Si está en caché: transmitir en ráfagas ultra-rápidas
+        if cached_result and not history:
+            full_text = cached_result["answer"]
+            words = full_text.split(" ")
+            for i in range(0, len(words), 5):
+                chunk = " ".join(words[i:i+5]) + " "
+                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+                await asyncio.sleep(0.015)
+
+            if session_id:
+                if session_id not in self.session_memories:
+                    self.session_memories[session_id] = []
+                self.session_memories[session_id].append({"role": "user", "content": query})
+                self.session_memories[session_id].append({"role": "assistant", "content": full_text})
+                self.session_memories[session_id] = self.session_memories[session_id][-6:]
+
+            yield f"data: {json.dumps({'type': 'done', 'sources': cached_result.get('sources', []), 'student': active_student, 'cached': True})}\n\n"
+            return
+
+        contexts = self.retrieve(query, history=history)
+        if not contexts:
+            msg = "No encontré información relevante en los reglamentos y guías oficiales del IUTECP para tu consulta. Te sugiero dirigirte a la Coordinación de Control de Estudios en la sede correspondiente."
+            if active_student:
+                msg = f"Hola, {active_student.get('nombre')}. {msg}"
+            yield f"data: {json.dumps({'type': 'token', 'content': msg})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'sources': [], 'student': active_student})}\n\n"
+            return
+
+        context_text = "\n\n".join([
+            f"[Fuente: {c['source']} - Pág. {c['page']}]\n{c['content']}"
+            for c in contexts
+        ])
+        unique_sources = list({f"{c['source']} (pág. {c['page']})" for c in contexts})
+
+        history_text = ""
+        if history:
+            formatted_turns = []
+            for h in history[-4:]:
+                role_label = "Estudiante" if h["role"] == "user" else "Asistente"
+                formatted_turns.append(f"{role_label}: {h['content']}")
+            history_text = "HISTORIAL RECIENTE DE LA CONVERSACIÓN:\n" + "\n".join(formatted_turns) + "\n\n"
+
+        system_instruction = (
+            "Eres el Asistente Virtual Oficial del Instituto Universitario de Tecnología 'Elías Calixto Pompa' (IUTECP). "
+            "Tu misión es orientar con amabilidad, claridad y precisión a la comunidad estudiantil. "
+            "REGLAS OBLIGATORIAS:\n"
+            "1. Responde de forma clara y estructurada (usa viñetas o listas numeradas cuando explique requisitos o pasos).\n"
+            "2. Basa tu respuesta ESTRICTAMENTE en la información institucional proporcionada en el CONTEXTO.\n"
+            "3. Recuerda y utiliza el HISTORIAL DE LA CONVERSACIÓN para responder preguntas de seguimiento.\n"
+            "4. Menciona las fuentes oficiales, artículos o sedes relevantes según el contexto.\n"
+            "5. Si el contexto no contiene la respuesta completa, indica cordialmente que el estudiante debe acudir a Control de Estudios o consultar en TernaNet.\n"
+            "6. Responde siempre en español formal pero cercano."
+        )
+
+        student_prompt_inject = ""
+        if active_student:
+            student_context = format_student_context_for_rag(active_student)
+            student_prompt_inject = f"{student_context}\n\n"
+            system_instruction += (
+                "\n\n=======================================================\n"
+                "ATENCIÓN - PERFIL DEL ESTUDIANTE IDENTIFICADO EN TERNANET:\n"
+                f"{student_context}\n"
+                "DIRECTRICES OBLIGATORIAS PARA ESTE ESTUDIANTE:\n"
+                f"1. Dirígete cordialmente al estudiante por su nombre ('{active_student.get('nombre')}').\n"
+                "2. Cruza los requisitos y normativas del IUTECP DIRECTAMENTE con los datos reales de su expediente.\n"
+                "3. Ofrece una orientación personalizada, motivadora y clara.\n"
+                "=======================================================\n"
+            )
+
+        user_prompt = f"{history_text}{student_prompt_inject}CONTEXTO OFICIAL DEL IUTECP:\n{context_text}\n\nNUEVA PREGUNTA DEL ESTUDIANTE: {query}"
+        full_prompt = f"{system_instruction}\n\n{user_prompt}"
+
+        current_api_key = os.getenv("GEMINI_API_KEY") or GEMINI_API_KEY
+        stream_success = False
+        full_answer = ""
+
+        if current_api_key and gemini_client:
+            model_name = os.getenv("GEMINI_MODEL") or GEMINI_MODEL or "gemini-flash-lite-latest"
+            models_to_try = [model_name, "gemini-3.5-flash", "gemini-flash-lite-latest"]
+            for candidate_model in models_to_try:
+                try:
+                    stream = gemini_client.models.generate_content_stream(
+                        model=candidate_model,
+                        contents=full_prompt
+                    )
+                    for chunk in stream:
+                        if chunk.text:
+                            full_answer += chunk.text
+                            yield f"data: {json.dumps({'type': 'token', 'content': chunk.text})}\n\n"
+                    stream_success = True
+                    break
+                except Exception as e:
+                    print(f"[!] Error streaming con {candidate_model}: {e}")
+
+        if not stream_success:
+            res = self.generate_response(query, session_id=session_id, student_cedula=student_cedula)
+            full_answer = res["answer"]
+            words = full_answer.split(" ")
+            for i in range(0, len(words), 5):
+                chunk = " ".join(words[i:i+5]) + " "
+                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+                await asyncio.sleep(0.015)
+
+        if session_id:
+            if session_id not in self.session_memories:
+                self.session_memories[session_id] = []
+            self.session_memories[session_id].append({"role": "user", "content": query})
+            self.session_memories[session_id].append({"role": "assistant", "content": full_answer})
+            self.session_memories[session_id] = self.session_memories[session_id][-6:]
+
+        self._save_to_cache(cache_key, {
+            "answer": full_answer,
+            "sources": unique_sources
+        })
+
+        yield f"data: {json.dumps({'type': 'done', 'sources': unique_sources, 'student': active_student})}\n\n"
 
     def _synthesize_local(self, query: str, contexts: List[Dict[str, Any]], student: Optional[Dict[str, Any]] = None) -> str:
         """Sintesis local inteligente cuando no se ha configurado una API Key de LLM."""

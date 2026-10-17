@@ -13,9 +13,11 @@ def _getaddrinfo_ipv4(host, port, family=0, type=0, proto=0, flags=0):
         family = socket.AF_INET
     return _orig_getaddrinfo(host, port, family, type, proto, flags)
 socket.getaddrinfo = _getaddrinfo_ipv4
+import httpx
+import asyncio
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
@@ -47,8 +49,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Pool de conexiones HTTP persistentes con Keep-Alive para máxima velocidad
+httpx_client: Optional[httpx.AsyncClient] = None
+
+
 @app.on_event("startup")
 async def startup_event():
+    global httpx_client
+    httpx_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(25.0, connect=10.0),
+        limits=httpx.Limits(max_keepalive_connections=20, max_connections=40),
+        headers={"User-Agent": "IUTECP-Assistant/2.0 (FastAPI; Render Cloud)"}
+    )
+
     print("[*] Precargando fragmentos de documentos en memoria...")
     chunks = rag_engine._get_memory_chunks()
     print(f"[OK] {len(chunks)} fragmentos precargados exitosamente en memoria.")
@@ -64,15 +77,45 @@ async def startup_event():
     if tg_token and ext_url:
         webhook_target = f"{ext_url.rstrip('/')}/api/telegram-webhook"
         print(f"[*] Registrando webhook de Telegram: {webhook_target}")
-        import asyncio
         async def _register_webhook_bg():
             try:
-                loop = asyncio.get_running_loop()
-                res_data = await loop.run_in_executor(None, telegram_api_call, tg_token, f"setWebhook?url={webhook_target}", None, 20)
+                res_data = await telegram_api_call(tg_token, f"setWebhook?url={webhook_target}", None, 20)
                 print(f"[OK] Webhook de Telegram registrado: {res_data}")
             except Exception as e:
                 print(f"[!] Error registrando webhook de Telegram: {e}")
         asyncio.create_task(_register_webhook_bg())
+
+    # ⏰ Optimización Keep-Warm: evitar que Render Free hiberne cada 15 minutos
+    if ext_url:
+        async def _keep_warm_loop():
+            while True:
+                await asyncio.sleep(540)  # Ping cada 9 minutos
+                try:
+                    if httpx_client and not httpx_client.is_closed:
+                        ping_url = f"{ext_url.rstrip('/')}/api/health"
+                        res = await httpx_client.get(ping_url)
+                        if res.status_code == 200:
+                            print(f"[Keep-Warm] Ping activo exitoso: 200 OK")
+                except Exception as e:
+                    print(f"[Keep-Warm] Notice: {e}")
+        asyncio.create_task(_keep_warm_loop())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global httpx_client
+    if httpx_client and not httpx_client.is_closed:
+        await httpx_client.aclose()
+
+
+@app.get("/api/health")
+async def health_endpoint():
+    """Endpoint ultra-rápido para monitoreo de estado y Keep-Warm ping."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "memory_chunks": len(rag_engine._get_memory_chunks())
+    }
 
 
 class ChatRequest(BaseModel):
@@ -95,54 +138,58 @@ class ChatResponse(BaseModel):
     sources: List[str]
     query_id: Optional[str] = None
     student: Optional[Dict[str, Any]] = None
+    cached: Optional[bool] = False
 
 
-def telegram_api_call(token: str, method: str, payload: dict = None, timeout: int = 20) -> dict:
-    """Realiza peticiones seguras a la API de Telegram con User-Agent personalizado y timeout generoso."""
+async def telegram_api_call(token: str, method: str, payload: dict = None, timeout: float = 20.0) -> dict:
+    """Realiza peticiones asíncronas con pool HTTP persistente a la API de Telegram."""
     url = f"https://api.telegram.org/bot{token}/{method}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    }
-    data = None
-    if payload is not None:
-        headers["Content-Type"] = "application/json"
-        data = json.dumps(payload).encode("utf-8")
-    
-    req = urllib.request.Request(url, data=data, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as res:
-        return json.loads(res.read().decode())
+    if httpx_client and not httpx_client.is_closed:
+        if payload is not None:
+            r = await httpx_client.post(url, json=payload, timeout=timeout)
+        else:
+            r = await httpx_client.get(url, timeout=timeout)
+        return r.json()
+    else:
+        data = json.dumps(payload).encode("utf-8") if payload is not None else None
+        headers = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"} if payload else {"User-Agent": "Mozilla/5.0"}
+        req = urllib.request.Request(url, data=data, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as res:
+            return json.loads(res.read().decode())
 
 
-def send_telegram_chat_action(token: str, chat_id: int, action: str = "typing"):
-    """Envía un indicador de acción (typing, record_voice) a Telegram."""
+async def send_telegram_chat_action(token: str, chat_id: int, action: str = "typing"):
+    """Envía un indicador de acción (typing, record_voice) a Telegram de forma no bloqueante."""
     try:
-        telegram_api_call(token, "sendChatAction", {"chat_id": chat_id, "action": action}, timeout=10)
+        await telegram_api_call(token, "sendChatAction", {"chat_id": chat_id, "action": action}, timeout=8.0)
     except Exception:
         pass
 
 
-def download_telegram_file(token: str, file_id: str) -> bytes:
-    """Descarga el contenido binario de un archivo (audio/voz) desde Telegram."""
-    data = telegram_api_call(token, f"getFile?file_id={file_id}", timeout=20)
+async def download_telegram_file(token: str, file_id: str) -> bytes:
+    """Descarga el contenido binario de un archivo (audio/voz) desde Telegram usando pool persistente."""
+    data = await telegram_api_call(token, f"getFile?file_id={file_id}", timeout=20.0)
     file_path = data.get("result", {}).get("file_path")
     if not file_path:
         raise ValueError("No se pudo obtener la ruta del archivo en Telegram.")
     
     download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
-    req = urllib.request.Request(download_url, headers={
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    })
-    with urllib.request.urlopen(req, timeout=25) as res:
-        return res.read()
+    if httpx_client and not httpx_client.is_closed:
+        r = await httpx_client.get(download_url, timeout=25.0)
+        return r.content
+    else:
+        req = urllib.request.Request(download_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=25) as res:
+            return res.read()
 
 
-def send_telegram_message(token: str, chat_id: int, text: str):
+async def send_telegram_message(token: str, chat_id: int, text: str):
+    """Envía un mensaje a Telegram con reintento automático si falla el formato Markdown."""
     try:
-        telegram_api_call(token, "sendMessage", {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, timeout=15)
+        await telegram_api_call(token, "sendMessage", {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, timeout=15.0)
     except Exception:
-        # Fallback a texto plano si falla el parseo de Markdown
         try:
-            telegram_api_call(token, "sendMessage", {"chat_id": chat_id, "text": text}, timeout=15)
+            await telegram_api_call(token, "sendMessage", {"chat_id": chat_id, "text": text}, timeout=15.0)
         except Exception as e:
             print(f"[!] Error enviando mensaje a Telegram: {e}")
 
@@ -176,10 +223,27 @@ async def chat_endpoint(request: ChatRequest):
             answer=result["answer"],
             sources=result["sources"],
             query_id=query_id,
-            student=result.get("student")
+            student=result.get("student"),
+            cached=result.get("cached", False)
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al procesar consulta: {str(e)}")
+
+
+@app.post("/api/chat/stream")
+async def chat_stream_endpoint(request: ChatRequest):
+    """🌊 Optimización Streaming: Transmite tokens en tiempo real a la interfaz web (Server-Sent Events)."""
+    if not request.message.strip():
+        raise HTTPException(status_code=400, detail="El mensaje no puede estar vacío")
+    
+    return StreamingResponse(
+        rag_engine.generate_response_stream(
+            query=request.message,
+            session_id=request.session_id,
+            student_cedula=request.student_cedula
+        ),
+        media_type="text/event-stream"
+    )
 
 
 @app.post("/api/chat/reset")
@@ -225,7 +289,7 @@ async def get_all_students_endpoint():
     return ternanet.load_students()
 
 
-def handle_telegram_message_async(token: str, message: dict):
+async def handle_telegram_message_async(token: str, message: dict):
     """Procesa mensajes de texto y notas de voz en segundo plano sin bloquear el webhook."""
     chat_id = message["chat"]["id"]
     user_name = message.get("from", {}).get("first_name", "Estudiante")
@@ -237,19 +301,19 @@ def handle_telegram_message_async(token: str, message: dict):
 
     # CASO AUDIO / NOTA DE VOZ
     if not text and voice:
-        send_telegram_chat_action(token, chat_id, "record_voice")
+        await send_telegram_chat_action(token, chat_id, "record_voice")
         try:
             file_id = voice.get("file_id")
             mime_type = voice.get("mime_type", "audio/ogg")
-            audio_bytes = download_telegram_file(token, file_id)
+            audio_bytes = await download_telegram_file(token, file_id)
             
-            send_telegram_chat_action(token, chat_id, "typing")
+            await send_telegram_chat_action(token, chat_id, "typing")
             transcription = rag_engine.transcribe_audio(audio_bytes, mime_type=mime_type)
             if transcription:
                 text = transcription
                 is_voice = True
             else:
-                send_telegram_message(
+                await send_telegram_message(
                     token, 
                     chat_id, 
                     "⚠️ No logré escuchar con claridad la nota de voz. Por favor intenta grabarla de nuevo o escribe tu consulta."
@@ -257,7 +321,7 @@ def handle_telegram_message_async(token: str, message: dict):
                 return
         except Exception as e:
             print(f"[!] Error procesando nota de voz de Telegram: {e}")
-            send_telegram_message(
+            await send_telegram_message(
                 token, 
                 chat_id, 
                 "⚠️ Ocurrió un inconveniente al procesar la nota de voz. Por favor intenta enviarla de nuevo o escribe tu consulta en texto."
@@ -281,7 +345,7 @@ def handle_telegram_message_async(token: str, message: dict):
             "• 👤 Consultas con tu expediente: Escribe `/estudiante <tu_cedula>`\n\n"
             "¿Qué consulta tienes hoy? Escríbela o envíame un audio."
         )
-        send_telegram_message(token, chat_id, welcome_msg)
+        await send_telegram_message(token, chat_id, welcome_msg)
         return
 
     if text.startswith(("/estudiante", "/cedula", "/perfil", "/login")):
@@ -299,10 +363,10 @@ def handle_telegram_message_async(token: str, message: dict):
                     f"💳 *Estatus Financiero:* {st['estatus_arancelario']}\n\n"
                     "¡Listo! Ahora todas tus consultas (servicio comunitario, pasantías, pagos, notas) se responderán cruzando la normativa con tu expediente."
                 )
-                send_telegram_message(token, chat_id, msg)
+                await send_telegram_message(token, chat_id, msg)
                 return
             else:
-                send_telegram_message(token, chat_id, f"⚠️ La cédula {clean_cand} no se encuentra registrada en el sistema de prueba de TernaNet.")
+                await send_telegram_message(token, chat_id, f"⚠️ La cédula {clean_cand} no se encuentra registrada en el sistema de prueba de TernaNet.")
                 return
         else:
             current_st = rag_engine.get_session_student(session_id)
@@ -322,10 +386,10 @@ def handle_telegram_message_async(token: str, message: dict):
                     f"💼 *Pasantías:* {pas_txt}\n\n"
                     "💡 *Tip:* Para consultar con otra cédula, escribe: `/estudiante <cedula>`"
                 )
-                send_telegram_message(token, chat_id, msg)
+                await send_telegram_message(token, chat_id, msg)
                 return
             else:
-                send_telegram_message(
+                await send_telegram_message(
                     token, 
                     chat_id, 
                     "ℹ️ Para identificarte con tu expediente de TernaNet escribe:\n`/estudiante <tu_cédula>`\n\nEjemplo: `/estudiante 27346776`"
@@ -334,11 +398,11 @@ def handle_telegram_message_async(token: str, message: dict):
 
     if text.startswith("/reset"):
         rag_engine.clear_session(session_id)
-        send_telegram_message(token, chat_id, "🔄 *Historial de conversación reiniciado.* ¿En qué otra consulta puedo orientarte?")
+        await send_telegram_message(token, chat_id, "🔄 *Historial de conversación reiniciado.* ¿En qué otra consulta puedo orientarte?")
         return
 
     # GENERAR RESPUESTA RAG
-    send_telegram_chat_action(token, chat_id, "typing")
+    await send_telegram_chat_action(token, chat_id, "typing")
     result = rag_engine.generate_response(text, session_id=session_id)
     
     analytics.record_query(
@@ -355,7 +419,7 @@ def handle_telegram_message_async(token: str, message: dict):
     if result.get("sources"):
         reply_text += "\n\n📚 *Fuentes oficiales:* " + ", ".join(result["sources"])
 
-    send_telegram_message(token, chat_id, reply_text)
+    await send_telegram_message(token, chat_id, reply_text)
 
 
 @app.post("/api/telegram-webhook")

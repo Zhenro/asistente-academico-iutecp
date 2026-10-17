@@ -1,0 +1,15 @@
+name: Keep Alive Render Service
+
+on:
+  schedule:
+    # Ejecutar cada 10 minutos
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping IUTECP Assistant Service
+        run: |
+          curl -s -f https://asistente-academico-iutecp.onrender.com/api/health || true

@@ -1345,7 +1345,8 @@
       const loadingRow = createTypingRow();
 
       try {
-        const response = await fetch('/api/chat', {
+        // 🌊 Optimización Streaming: Consumo directo por Server-Sent Events (SSE)
+        const response = await fetch('/api/chat/stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -1355,18 +1356,79 @@
           })
         });
 
-        const data = await response.json();
-        loadingRow.remove();
+        if (response.ok && response.body) {
+          loadingRow.remove();
 
-        if (response.ok) {
-          if (data.student && (!currentStudent || currentStudent.cedula !== data.student.cedula)) {
-            currentStudent = data.student;
-            localStorage.setItem('iutecp_active_student', JSON.stringify(data.student));
+          const streamBubble = createStreamingBubble();
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let accumulatedText = '';
+          let finalSources = [];
+          let finalStudent = null;
+          let isCached = false;
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event = JSON.parse(line.substring(6));
+                  if (event.type === 'start') {
+                    if (event.student && (!currentStudent || currentStudent.cedula !== event.student.cedula)) {
+                      currentStudent = event.student;
+                      localStorage.setItem('iutecp_active_student', JSON.stringify(event.student));
+                      updateStudentUI();
+                    }
+                  } else if (event.type === 'token') {
+                    accumulatedText += event.content;
+                    streamBubble.updateText(accumulatedText);
+                  } else if (event.type === 'done') {
+                    finalSources = event.sources || [];
+                    finalStudent = event.student || null;
+                    isCached = event.cached || false;
+                  }
+                } catch(e) {}
+              }
+            }
+          }
+
+          if (finalStudent && (!currentStudent || currentStudent.cedula !== finalStudent.cedula)) {
+            currentStudent = finalStudent;
+            localStorage.setItem('iutecp_active_student', JSON.stringify(finalStudent));
             updateStudentUI();
           }
-          appendBubble('bot', data.answer, data.sources, data.query_id);
+
+          streamBubble.finalize(accumulatedText, finalSources, isCached);
+
         } else {
-          appendBubble('bot', '⚠️ Disculpa, ocurrió un error momentáneo al consultar la base de datos. Por favor intenta de nuevo.');
+          // Fallback seguro a endpoint síncrono estándar
+          const fallbackRes = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              message: text, 
+              session_id: currentSessionId,
+              student_cedula: currentStudent ? currentStudent.cedula : null
+            })
+          });
+          const data = await fallbackRes.json();
+          loadingRow.remove();
+          if (fallbackRes.ok) {
+            if (data.student && (!currentStudent || currentStudent.cedula !== data.student.cedula)) {
+              currentStudent = data.student;
+              localStorage.setItem('iutecp_active_student', JSON.stringify(data.student));
+              updateStudentUI();
+            }
+            appendBubble('bot', data.answer, data.sources, data.query_id);
+          } else {
+            appendBubble('bot', '⚠️ Disculpa, ocurrió un error momentáneo al consultar la base de datos.');
+          }
         }
       } catch (err) {
         loadingRow.remove();
@@ -1375,6 +1437,91 @@
         sendBtn.disabled = false;
         chatQuery.focus();
       }
+    }
+
+    function createStreamingBubble() {
+      const row = document.createElement('div');
+      row.className = 'chat-bubble-row bot';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar-icon';
+      avatar.textContent = 'IU';
+
+      const contentBox = document.createElement('div');
+      contentBox.className = 'bubble-content';
+      contentBox.innerHTML = '<span class="typing-dot" style="display:inline-block;"></span>';
+
+      row.appendChild(avatar);
+      row.appendChild(contentBox);
+      chatScroll.appendChild(row);
+      chatScroll.scrollTop = chatScroll.scrollHeight;
+
+      return {
+        updateText: (text) => {
+          contentBox.innerHTML = marked.parse(text);
+          chatScroll.scrollTop = chatScroll.scrollHeight;
+        },
+        finalize: (finalText, sources = [], isCached = false) => {
+          contentBox.innerHTML = marked.parse(finalText);
+
+          if (isCached) {
+            const cacheBadge = document.createElement('div');
+            cacheBadge.style.fontSize = '0.7rem';
+            cacheBadge.style.color = '#059669';
+            cacheBadge.style.fontWeight = '700';
+            cacheBadge.style.marginTop = '6px';
+            cacheBadge.textContent = '⚡ Respuesta instantánea desde caché en memoria (<10ms)';
+            contentBox.appendChild(cacheBadge);
+          }
+
+          if (sources && sources.length > 0) {
+            const sourceBox = document.createElement('div');
+            sourceBox.className = 'source-box';
+            sourceBox.innerHTML = `<div class="source-box-title">📚 Fuentes Normativas Oficiales:</div>`;
+            const chipRow = document.createElement('div');
+            chipRow.className = 'source-chips-row';
+            sources.forEach(src => {
+              const chip = document.createElement('span');
+              chip.className = 'chip-badge';
+              chip.textContent = src;
+              chipRow.appendChild(chip);
+            });
+            sourceBox.appendChild(chipRow);
+            contentBox.appendChild(sourceBox);
+          }
+
+          const footerActions = document.createElement('div');
+          footerActions.className = 'bubble-footer-actions';
+          const spacer = document.createElement('div');
+          footerActions.appendChild(spacer);
+
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'copy-action-btn';
+          copyBtn.innerHTML = `
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>Copiar</span>
+          `;
+          copyBtn.onclick = () => {
+            navigator.clipboard.writeText(finalText);
+            copyBtn.innerHTML = `<span>✓ Copiado</span>`;
+            setTimeout(() => {
+              copyBtn.innerHTML = `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copiar</span>
+              `;
+            }, 2000);
+          };
+          footerActions.appendChild(copyBtn);
+          contentBox.appendChild(footerActions);
+          chatScroll.scrollTop = chatScroll.scrollHeight;
+        }
+      };
     }
 
     function appendBubble(role, content, sources = [], queryId = null) {
