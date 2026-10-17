@@ -51,11 +51,9 @@ async def startup_event():
     if tg_token and ext_url:
         webhook_target = f"{ext_url.rstrip('/')}/api/telegram-webhook"
         print(f"[*] Registrando webhook de Telegram: {webhook_target}")
-        import urllib.request
         try:
-            req = urllib.request.Request(f"https://api.telegram.org/bot{tg_token}/setWebhook?url={webhook_target}")
-            res = urllib.request.urlopen(req, timeout=8)
-            print(f"[OK] Webhook de Telegram registrado: {res.read().decode()}")
+            res_data = telegram_api_call(tg_token, f"setWebhook?url={webhook_target}", timeout=25)
+            print(f"[OK] Webhook de Telegram registrado: {res_data}")
         except Exception as e:
             print(f"[!] Error registrando webhook de Telegram: {e}")
 
@@ -74,44 +72,52 @@ class ChatResponse(BaseModel):
     sources: List[str]
 
 
+def telegram_api_call(token: str, method: str, payload: dict = None, timeout: int = 20) -> dict:
+    """Realiza peticiones seguras a la API de Telegram con User-Agent personalizado y timeout generoso."""
+    url = f"https://api.telegram.org/bot{token}/{method}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    }
+    data = None
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode("utf-8")
+    
+    req = urllib.request.Request(url, data=data, headers=headers)
+    with urllib.request.urlopen(req, timeout=timeout) as res:
+        return json.loads(res.read().decode())
+
+
 def send_telegram_chat_action(token: str, chat_id: int, action: str = "typing"):
     """Envía un indicador de acción (typing, record_voice) a Telegram."""
     try:
-        url = f"https://api.telegram.org/bot{token}/sendChatAction"
-        payload = json.dumps({"chat_id": chat_id, "action": action}).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=5)
+        telegram_api_call(token, "sendChatAction", {"chat_id": chat_id, "action": action}, timeout=10)
     except Exception:
         pass
 
 
 def download_telegram_file(token: str, file_id: str) -> bytes:
     """Descarga el contenido binario de un archivo (audio/voz) desde Telegram."""
-    url_info = f"https://api.telegram.org/bot{token}/getFile?file_id={file_id}"
-    req = urllib.request.Request(url_info)
-    with urllib.request.urlopen(req, timeout=10) as res:
-        data = json.loads(res.read().decode())
+    data = telegram_api_call(token, f"getFile?file_id={file_id}", timeout=20)
     file_path = data.get("result", {}).get("file_path")
     if not file_path:
         raise ValueError("No se pudo obtener la ruta del archivo en Telegram.")
     
     download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
-    with urllib.request.urlopen(download_url, timeout=15) as res:
+    req = urllib.request.Request(download_url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    })
+    with urllib.request.urlopen(req, timeout=25) as res:
         return res.read()
 
 
 def send_telegram_message(token: str, chat_id: int, text: str):
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = json.dumps({"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
     try:
-        urllib.request.urlopen(req, timeout=10)
+        telegram_api_call(token, "sendMessage", {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}, timeout=15)
     except Exception:
         # Fallback a texto plano si falla el parseo de Markdown
-        payload_plain = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
-        req_plain = urllib.request.Request(url, data=payload_plain, headers={"Content-Type": "application/json"})
         try:
-            urllib.request.urlopen(req_plain, timeout=10)
+            telegram_api_call(token, "sendMessage", {"chat_id": chat_id, "text": text}, timeout=15)
         except Exception as e:
             print(f"[!] Error enviando mensaje a Telegram: {e}")
 
@@ -235,15 +241,12 @@ async def telegram_status():
     webhook_url = None
     telegram_info = {}
     if configured:
-        import urllib.request
         try:
-            req = urllib.request.Request(f"https://api.telegram.org/bot{token}/getWebhookInfo")
-            res = urllib.request.urlopen(req, timeout=5)
-            info = json.loads(res.read().decode())
+            info = telegram_api_call(token, "getWebhookInfo", timeout=15)
             telegram_info = info.get("result", {})
             webhook_url = telegram_info.get("url")
-        except Exception:
-            pass
+        except Exception as e:
+            telegram_info = {"error": str(e)}
     return {
         "configured": configured,
         "webhook_url": webhook_url,
@@ -264,11 +267,8 @@ async def telegram_setup():
         ext_url = "https://asistente-academico-iutecp.onrender.com"
 
     webhook_target = f"{ext_url.rstrip('/')}/api/telegram-webhook"
-    import urllib.request
     try:
-        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/setWebhook?url={webhook_target}")
-        res = urllib.request.urlopen(req, timeout=8)
-        result = json.loads(res.read().decode())
+        result = telegram_api_call(token, f"setWebhook?url={webhook_target}", timeout=25)
         return {"status": "success", "webhook_target": webhook_target, "telegram_response": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
