@@ -1367,6 +1367,7 @@
           let finalSources = [];
           let finalStudent = null;
           let isCached = false;
+          let finalQueryId = null;
 
           while (true) {
             const { value, done } = await reader.read();
@@ -1392,6 +1393,7 @@
                     finalSources = event.sources || [];
                     finalStudent = event.student || null;
                     isCached = event.cached || false;
+                    finalQueryId = event.query_id || null;
                   }
                 } catch(e) {}
               }
@@ -1404,7 +1406,7 @@
             updateStudentUI();
           }
 
-          streamBubble.finalize(accumulatedText, finalSources, isCached);
+          streamBubble.finalize(accumulatedText, finalSources, isCached, finalQueryId);
 
         } else {
           // Fallback seguro a endpoint síncrono estándar
@@ -1461,7 +1463,7 @@
           contentBox.innerHTML = marked.parse(text);
           chatScroll.scrollTop = chatScroll.scrollHeight;
         },
-        finalize: (finalText, sources = [], isCached = false) => {
+        finalize: (finalText, sources = [], isCached = false, queryId = null) => {
           contentBox.innerHTML = marked.parse(finalText);
 
           if (isCached) {
@@ -1490,10 +1492,23 @@
             contentBox.appendChild(sourceBox);
           }
 
+          // Footer Actions: Grupo de Feedback (👍 / 👎) + Copiar
           const footerActions = document.createElement('div');
           footerActions.className = 'bubble-footer-actions';
-          const spacer = document.createElement('div');
-          footerActions.appendChild(spacer);
+
+          if (queryId) {
+            const fbGroup = document.createElement('div');
+            fbGroup.className = 'feedback-btn-group';
+            fbGroup.innerHTML = `
+              <span style="font-size:0.7rem; color:var(--text-muted); margin-right:2px;">¿Te sirvió?</span>
+              <button class="feedback-btn" title="Respuesta útil" onclick="sendRating(this, '${queryId}', 'up')">👍</button>
+              <button class="feedback-btn" title="No resolvió mi duda" onclick="sendRating(this, '${queryId}', 'down')">👎</button>
+            `;
+            footerActions.appendChild(fbGroup);
+          } else {
+            const spacer = document.createElement('div');
+            footerActions.appendChild(spacer);
+          }
 
           const copyBtn = document.createElement('button');
           copyBtn.className = 'copy-action-btn';

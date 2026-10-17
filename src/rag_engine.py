@@ -14,6 +14,7 @@ try:
         get_student_by_cedula, detect_cedula_in_text,
         format_student_context_for_rag, normalize_cedula
     )
+    import src.analytics as analytics
 except ImportError:
     from config import (
         TOP_K_RESULTS, GEMINI_API_KEY, 
@@ -23,6 +24,7 @@ except ImportError:
         get_student_by_cedula, detect_cedula_in_text,
         format_student_context_for_rag, normalize_cedula
     )
+    import analytics
 
 # Try importing modern Google GenAI Client
 try:
@@ -362,7 +364,13 @@ class RAGEngine:
                 self.session_memories[session_id].append({"role": "assistant", "content": full_text})
                 self.session_memories[session_id] = self.session_memories[session_id][-6:]
 
-            yield f"data: {json.dumps({'type': 'done', 'sources': cached_result.get('sources', []), 'student': active_student, 'cached': True})}\n\n"
+            query_id = analytics.record_query(
+                query=query,
+                channel="web",
+                answer=full_text,
+                sources=cached_result.get("sources", [])
+            )
+            yield f"data: {json.dumps({'type': 'done', 'sources': cached_result.get('sources', []), 'student': active_student, 'cached': True, 'query_id': query_id})}\n\n"
             return
 
         contexts = self.retrieve(query, history=history)
@@ -370,8 +378,15 @@ class RAGEngine:
             msg = "No encontré información relevante en los reglamentos y guías oficiales del IUTECP para tu consulta. Te sugiero dirigirte a la Coordinación de Control de Estudios en la sede correspondiente."
             if active_student:
                 msg = f"Hola, {active_student.get('nombre')}. {msg}"
+            
+            query_id = analytics.record_query(
+                query=query,
+                channel="web",
+                answer=msg,
+                sources=[]
+            )
             yield f"data: {json.dumps({'type': 'token', 'content': msg})}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'sources': [], 'student': active_student})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'sources': [], 'student': active_student, 'query_id': query_id})}\n\n"
             return
 
         context_text = "\n\n".join([
@@ -461,7 +476,14 @@ class RAGEngine:
             "sources": unique_sources
         })
 
-        yield f"data: {json.dumps({'type': 'done', 'sources': unique_sources, 'student': active_student})}\n\n"
+        query_id = analytics.record_query(
+            query=query,
+            channel="web",
+            answer=full_answer,
+            sources=unique_sources
+        )
+
+        yield f"data: {json.dumps({'type': 'done', 'sources': unique_sources, 'student': active_student, 'query_id': query_id})}\n\n"
 
     def _synthesize_local(self, query: str, contexts: List[Dict[str, Any]], student: Optional[Dict[str, Any]] = None) -> str:
         """Sintesis local inteligente cuando no se ha configurado una API Key de LLM."""
