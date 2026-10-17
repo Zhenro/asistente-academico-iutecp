@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, H
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 try:
     from src.config import FRONTEND_DIR, DOCUMENTS_DIR
